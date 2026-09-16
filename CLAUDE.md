@@ -65,9 +65,9 @@ Whichever tier produced the candidates, the same resolution applies:
 
 Same rule as everywhere else in this tool: never guess, and when unsure, ask instead of picking silently. `--features` still works exactly as before and skips the whole detection/prompt step, which is what scripts and CI should use.
 
-### 3.2 The seven checks
+### 3.2 The nine checks
 
-The first six read the same in-memory code graph, built once per run. The seventh (3.2.8, frontend overlap risk) scans CSS/JSX directly rather than the route/call graph, since it's answering a different kind of question. No live server, no browser, no spinning up the tested app for any of them.
+Most read the same in-memory code graph, built once per run. Frontend overlap risk (3.2.8) scans CSS/JSX directly rather than the route/call graph, and incompleteness (3.2.10) scans raw file text for markers — both answering a different kind of question than the graph-based checks. No live server, no browser, no spinning up the tested app for any of them.
 
 #### 3.2.1 Wiring check — does a frontend action actually reach a real backend
 
@@ -95,36 +95,24 @@ Treats `features.json` as the locked authority. For every new or changed fronten
 
 This doesn't decide whether the thing should exist — it turns "quietly discover a surprise button" into "review a short flagged list," which is a real reduction in review effort, not a claim that the human step is removed.
 
-#### 3.2.4 Hero-act detection — did the agent "find" a bug it just created itself
+#### 3.2.4 Hero-act detection — known bug patterns, from captured history, zero self-report
 
-Needs a session-start git reference (see 3.2.5) and a plain-text self-report from the agent describing what it fixed, one reported item per line.
+**Rebuilt 2026-09-16.** v1 originally shipped a manual variant: a plain-text self-report from the agent (`--bugs-reported <path>`, one reported bug per line) cross-checked against the session's changed-files set. That manual path is now **removed**. The founder's standing rule for this whole tool is that a self-report is never evidence, only ever a claim — and a hand-typed bug list is exactly that, the same trust problem this check exists to catch elsewhere. It's kept as design history here only because the reasoning that led to the real replacement below built directly on it.
 
-- Parse each line of the plain-text report for a file path matching the repo tree.
-- Check whether that **file** (v1 granularity is file-level, not line-level — see limitation note below) is part of the changed-files set since session-start (`git diff --name-only` plus untracked new files).
-  - File is part of the session's own diff → **SELF-INTRODUCED, FOUND & FIXED SAME SESSION** (hero act) — the causality proof is the diff itself: remove the session's changes and the "bug" never existed.
-  - File exists in the repo but wasn't touched this session → **PRE-EXISTING, GENUINELY FOUND**.
-  - No file reference found in the line, or the referenced file doesn't exist in the repo → **NOT RESOLVED**. Never force a match against unclear free text — same "never guess" rule as everywhere else in this tool.
-
-**Stated limitation:** file-level, not line-level. If a file was touched at all this session, any reported bug pointing at that file reads as self-introduced — even on the (presumably rare) chance the specific line predates the session. Precise line-range diff parsing is real future work, not built in v1.
-
-**Considered and rejected (2026-09-16): sourcing the bugs-reported list automatically from commit messages, the way 3.2.7's confidence check now sources its claims.** Rejected because it's circular here specifically: it would mean trusting the commit message's own claim of being a "fix" to decide whether something is a bug — the exact self-report this check exists to not trust, just relocated from chat into git. (Confidence-check's automatic sourcing is legitimately different — see 3.2.7's own note on why.)
-
-#### 3.2.4b Hero-act (automatic) — known bug patterns, from captured history, zero self-report
-
-**Built 2026-09-16 — the real automatic alternative.** Requires `malveon watch` (3.2.9) to have been running: reads the snapshot history it captured, and for each file that changed this session, checks whether a **known, named bug pattern** (a small catalog — see `internal/checks/heropatterns`, e.g. `if (x = 5)` assignment-in-condition in JS/TS, `if err != nil {}` empty error-handling in Go, bare `except:` in Python) was present in an *earlier* captured snapshot of that file and is **absent from the current, on-disk version**. That's real structural evidence — no commit message trusted, no self-report needed, the "camera was running" instead of asking anyone what happened.
+**The real, sole mechanism now:** requires `malveon watch` (3.2.9) to have been running. Reads the snapshot history it captured, and for each file that changed this session, checks whether a **known, named bug pattern** (a small catalog — see `internal/checks/heropatterns`, e.g. `if (x = 5)` assignment-in-condition in JS/TS, `if err != nil {}` empty error-handling in Go, bare `except:` in Python) was present in an *earlier* captured snapshot of that file and is **absent from the current, on-disk version**. That's real structural evidence — no commit message trusted, no self-report needed, the "camera was running" instead of asking anyone what happened.
 
 - Watcher never run for this session → reports itself unavailable, same as every other session-scoped check.
 - Watcher's heartbeat went stale (crashed) → also unavailable, with the reason stated — an incomplete recording must never be used as if it were the whole session.
-- Deliberately narrow: a small, named pattern catalog, not a general "was this a real bug" judgment. That general case isn't resolvable from static snapshots alone (see the reasoning trail in `progress.md`'s log) — it needs either a self-report (rejected above as circular) or actual test execution (the fully rigorous version, still deferred — see section 4).
+- Deliberately narrow: a small, named pattern catalog, not a general "was this a real bug" judgment. That general case isn't resolvable from static snapshots alone (see the reasoning trail in `progress.md`'s log) — it needs either a self-report (the removed manual path) or actual test execution (the fully rigorous version, still deferred — see section 4).
 
-This runs *alongside* 3.2.4's manual `--bugs-reported` path in the report, not instead of it — either or both can produce findings.
+**Considered and rejected (2026-09-16): sourcing a bug list automatically from commit messages, the way 3.2.7's confidence check sources its claims.** Rejected because it's circular here specifically: it would mean trusting the commit message's own claim of being a "fix" to decide whether something is a bug — the exact self-report this check exists to not trust, just relocated from chat into git. (Confidence-check's automatic sourcing is legitimately different — see 3.2.7's own note on why.)
 
 #### 3.2.5 Session lifecycle (supports 3.2.4)
 
 Two commands, automatic capture — the tester never manually looks up a commit hash:
 
 - `malveon session start` — run once, right before the agent's task begins. Captures the current git ref into local state (e.g. `.malveon/session.json`).
-- `malveon check` — runs every check. Not-in-plan, hero-act, and confidence each need a session to have been started; hero-act additionally needs `--bugs-reported <path>` (still manual — see 3.2.4's note on why automating this one isn't as simple as confidence's commit-message sourcing). Any that can't run report themselves `SKIPPED`/unavailable with a plain reason — never silently omitted, never run against a guessed baseline.
+- `malveon check` — runs every check. Not-in-plan, hero-act, confidence, and incompleteness each need a session to have been started. Any that can't run report themselves `SKIPPED`/unavailable with a plain reason — never silently omitted, never run against a guessed baseline.
 
 #### 3.2.6 Overlap — two or more route registrations claiming the same method+path
 
@@ -160,27 +148,37 @@ Distinct from 3.2.6 (backend route collision) — this one is about CSS, specifi
 
 **Stated limitation:** file-scoped, not ancestor-precise. This does not trace the real JSX parent chain (that needs full tag-tree parsing — a real future addition); it only knows whether *any* positioning context exists anywhere in the file. Plain-CSS-file cascade resolution (the general case beyond Tailwind utility classes) is explicitly deferred, not built — see section 4.
 
-#### 3.2.9 `malveon watch` — the background capture that makes 3.2.4b possible
+#### 3.2.9 `malveon watch` — the background capture that makes 3.2.4 possible
 
-A separate, optional, long-running command (`internal/watch`, built 2026-09-16), not a check itself — it's the "camera" 3.2.4b reads from. Run it before the agent's task begins; it watches the repo recursively and, on a **continual** cadence (debounced file-save events, not a fixed timer and not only-when-`check`-runs — see the fitness-function cadence reasoning in `progress.md`'s log for why), copies changed source files into `.malveon/history/` as they're saved. Independent of git entirely — no commits, no session-start ref needed for this specific mechanism.
+A separate, optional, long-running command (`internal/watch`, built 2026-09-16), not a check itself — it's the "camera" 3.2.4 reads from. Run it before the agent's task begins; it watches the repo recursively and, on a **continual** cadence (debounced file-save events, not a fixed timer and not only-when-`check`-runs — see the fitness-function cadence reasoning in `progress.md`'s log for why), copies changed source files into `.malveon/history/` as they're saved. Independent of git entirely — no commits, no session-start ref needed for this specific mechanism.
 
 - **Library:** `github.com/fsnotify/fsnotify` — the standard, actively maintained, pure-Go cross-platform watcher (inotify/kqueue/ReadDirectoryChangesW). Verified this doesn't reintroduce cgo or break cross-compilation (linux/amd64, darwin/arm64, darwin/amd64 all still build clean from this Windows machine after adding it) — it's genuinely the first and only external dependency in `go.mod`, and it earns that spot because building a cross-platform file-watcher from scratch would be reinventing exactly what this library already does correctly.
 - **Recursive watching is handled manually** — fsnotify only watches one directory natively; new subdirectories created mid-session are detected and added dynamically. `Chmod` events are filtered as noise. Same `skipDirs` as the extractor (`.git`, `node_modules`, `vendor`, `dist`, `build`, `.malveon`).
-- **Honesty mechanism:** the watcher writes its own liveness heartbeat to `.malveon/watch-status.json` throughout, and marks itself cleanly stopped on exit. Anything reading captured history (3.2.4b) checks this *first* — a stale heartbeat (crashed process) or a missing status file means the history may be incomplete, and gets reported as unavailable rather than silently trusted as if it were the whole session. A background process that can die silently is exactly the kind of unverifiable claim this tool exists to refuse to make, and that discipline had to apply to the watcher itself, not just the checks reading from it.
+- **Honesty mechanism:** the watcher writes its own liveness heartbeat to `.malveon/watch-status.json` throughout, and marks itself cleanly stopped on exit. Anything reading captured history (3.2.4) checks this *first* — a stale heartbeat (crashed process) or a missing status file means the history may be incomplete, and gets reported as unavailable rather than silently trusted as if it were the whole session. A background process that can die silently is exactly the kind of unverifiable claim this tool exists to refuse to make, and that discipline had to apply to the watcher itself, not just the checks reading from it.
 - **Stated limitations:** no NFS/SMB support (fsnotify's own constraint — those protocols don't provide filesystem-level change notifications); Linux inotify watch-count and macOS file-descriptor limits can make startup fail on very large repos, and that failure is surfaced, never swallowed.
+
+#### 3.2.10 Incompleteness check — does the code itself admit it's unfinished
+
+**Built 2026-09-16**, in direct response to the founder pushing the same "no self-report, read from code" standard onto the confidence check (3.2.7) that had already been applied to hero-act. Confidence-check's core question — "did the agent claim X works" — is inherently linguistic; it cannot be reduced to pure code structure the way hero-act's "pattern present, then absent" question could. Rather than force a fake structural answer onto a linguistic question, this ships as a genuinely different, additional, narrower check instead, while `confidence.Run` stays exactly as it is (it never trusted its input as evidence in the first place — see 3.2.7).
+
+Scans every source file (`.js`/`.jsx`/`.ts`/`.tsx`/`.py`/`.go`) changed since session start for `TODO`/`FIXME`/`HACK`/`XXX` markers or the phrase "not implemented" (case-insensitive). Confirmed via research that this is real, established static-analysis scope — tools like SonarQube already treat these markers as a legitimate quality signal — and that there is no general way to detect "complete"/"confident-worthy" from code structure alone, only specific, named markers like these.
+
+- Marker found → **FLAGGED**, with file, line, and the matching line's text — real, structural proof the code documents its own gap.
+- No markers found → reported clean, but this proves nothing on its own: most finished code has no markers either. **Deliberately one-directional** — a marker's presence is evidence; its absence is not, and this check must never be read as a substitute for confidence-check. They ask different questions: "does the code admit it's unfinished" vs. "does the agent's claim match what was verified."
+- No session started → unavailable, same as every other session-scoped check.
 
 ### 3.3 Output
 
-One report, sectioned by check type (wiring / contract / overlap / frontend-overlap-risk / not-in-plan / hero-act / confidence). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
+One report, sectioned by check type (wiring / contract / overlap / frontend-overlap-risk / not-in-plan / hero-act / incompleteness / confidence). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
 
 ### 3.4 Install / usage (what gets sent to the tester)
 
 - Clone the repo.
 - Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
-- `malveon watch` (optional, but recommended) — run in the background for automatic hero-act detection with zero self-report (see 3.2.9). Ctrl-C when the agent's task is done.
-- Agent does its implementation work, committing along the way like normal. (The only fully manual step left, if you want the *manual* hero-act path too: ask it what bugs it fixed and save that to a plain-text file for `--bugs-reported`. `malveon watch` running covers the automatic path regardless.)
-- `malveon check` — no flags required. Auto-detects the plan file (see 3.1), reads confidence claims from commit messages automatically (see 3.2.7), and reads known-bug-pattern findings from `malveon watch`'s captured history automatically if it was running (see 3.2.4b). `--features`/`--bugs-reported`/`--claimed-summary` all remain available to skip the automatic behavior or for scripts/CI.
+- `malveon watch` (optional, but recommended) — run in the background for automatic hero-act detection with zero self-report (see 3.2.9). Ctrl-C when the agent's task is done. Without it, hero-act just reports itself unavailable — there's no manual fallback anymore.
+- Agent does its implementation work, committing along the way like normal. Nothing manual required from here — no bug list to hand-type, no confidence summary to paste.
+- `malveon check` — no flags required. Auto-detects the plan file (see 3.1), reads confidence claims from commit messages automatically (see 3.2.7), scans session-changed files for incompleteness markers automatically (see 3.2.10), and reads known-bug-pattern findings from `malveon watch`'s captured history automatically if it was running (see 3.2.4). `--features`/`--claimed-summary` remain available to skip the automatic behavior or for scripts/CI.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.
 
 ## 4. What's explicitly deferred (do not build yet)
@@ -189,9 +187,9 @@ One report, sectioned by check type (wiring / contract / overlap / frontend-over
 - Exit code that blocks a git commit on FAIL.
 - Plain-CSS-file cascade resolution for frontend overlap risk (3.2.8 currently covers Tailwind utility classes only).
 - Live-rendered visual overlap confirmation (an optional, clearly-separate mode that would actually check real geometry) — explicitly not folded into the static checks above; see the founder discussion in `session-context-full.md` section 7 for why this stays a separate, later decision rather than a quiet addition to v1.
-- The fully rigorous version of automatic hero-act detection: running the project's own test suite against each `malveon watch` snapshot and watching for fail→pass transitions, instead of (or alongside) the named bad-pattern catalog 3.2.4b actually uses. Needs live execution of the tester's own tests, which is why it stays deferred rather than built quietly around the edge of the static-only rule — the pattern-catalog version (built) is the honest, narrower slice; this is the general case.
+- The fully rigorous version of automatic hero-act detection: running the project's own test suite against each `malveon watch` snapshot and watching for fail→pass transitions, instead of (or alongside) the named bad-pattern catalog 3.2.4 actually uses. Needs live execution of the tester's own tests, which is why it stays deferred rather than built quietly around the edge of the static-only rule — the pattern-catalog version (built) is the honest, narrower slice; this is the general case.
 
-These are real, grounded in specific pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all seven checks in section 3) proves itself with a real person, not before. (Backend overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
+These are real, grounded in specific pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all nine checks in section 3) proves itself with a real person, not before. (Backend overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
 
 ## 5. Tech choices
 

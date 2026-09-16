@@ -12,8 +12,8 @@ import (
 
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
-	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
 	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
+	"github.com/LadsonDavid/beta-test/internal/checks/incompleteness"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
@@ -48,9 +48,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage:")
 	fmt.Fprintln(os.Stderr, "  malveon session start [--root <path>]")
 	fmt.Fprintln(os.Stderr, "  malveon watch [--root <path>]")
-	fmt.Fprintln(os.Stderr, "    Run this in the background before the agent's task begins, for automatic")
-	fmt.Fprintln(os.Stderr, "    hero-act detection with no self-report needed. Ctrl-C to stop.")
-	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
+	fmt.Fprintln(os.Stderr, "    Run this in the background before the agent's task begins, so the")
+	fmt.Fprintln(os.Stderr, "    hero-act check has real history to check — no self-report needed. Ctrl-C to stop.")
+	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--claimed-summary <path>]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
 	fmt.Fprintln(os.Stderr, "    --claimed-summary can be omitted too: the confidence check reads commit")
@@ -94,7 +94,6 @@ func runCheck(args []string) {
 	fset := flag.NewFlagSet("check", flag.ExitOnError)
 	featuresPath := fset.String("features", "", "path to the features file: .json, .md (checklist), or plain text (required)")
 	root := fset.String("root", ".", "repo root to scan")
-	bugsReported := fset.String("bugs-reported", "", "path to a plain-text file of self-reported bugs (for the hero-act check)")
 	claimedSummary := fset.String("claimed-summary", "", "optional: path to a plain-text file of the agent's own claims (overrides the automatic commit-message scan for the confidence check)")
 	fset.Parse(args)
 
@@ -150,12 +149,9 @@ func runCheck(args []string) {
 
 	report.WritePlanAuthority(os.Stdout, planauthority.Run(g, fs, *root))
 
-	if *bugsReported != "" {
-		report.WriteHeroAct(os.Stdout, heroact.Run(*root, *bugsReported))
-	} else {
-		report.WriteHeroAct(os.Stdout, heroact.Result{Available: false, Reason: "no --bugs-reported file given"})
-	}
 	report.WriteHeroPatterns(os.Stdout, heropatterns.Run(*root))
+
+	report.WriteIncompleteness(os.Stdout, incompleteness.Run(*root))
 
 	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *root, *claimedSummary))
 }

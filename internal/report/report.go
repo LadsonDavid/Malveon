@@ -10,8 +10,8 @@ import (
 
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
-	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
 	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
+	"github.com/LadsonDavid/beta-test/internal/checks/incompleteness"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
@@ -88,39 +88,9 @@ func WritePlanAuthority(w io.Writer, res planauthority.Result) {
 	fmt.Fprintf(w, "%d NOT IN PLAN\n\n", len(res.Findings))
 }
 
-func WriteHeroAct(w io.Writer, res heroact.Result) {
-	fmt.Fprintln(w, "HERO-ACT CHECK — did the agent \"find\" a bug it introduced itself this session")
-	fmt.Fprintln(w, strings.Repeat("-", 78))
-	if !res.Available {
-		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
-		return
-	}
-	if len(res.Findings) == 0 {
-		fmt.Fprintln(w, "no self-reported bugs to check (empty or missing --bugs-reported input)")
-		fmt.Fprintln(w)
-		return
-	}
-	selfIntro, preExisting, notResolved := 0, 0, 0
-	for _, f := range res.Findings {
-		fmt.Fprintf(w, "[%s]\n", f.Verdict)
-		fmt.Fprintf(w, "  reported: %s\n", f.ReportLine)
-		fmt.Fprintf(w, "  reason: %s\n", f.Reason)
-		fmt.Fprintln(w)
-		switch f.Verdict {
-		case heroact.SelfIntroduced:
-			selfIntro++
-		case heroact.PreExisting:
-			preExisting++
-		case heroact.NotResolved:
-			notResolved++
-		}
-	}
-	fmt.Fprintf(w, "%d SELF-INTRODUCED, %d PRE-EXISTING, %d NOT RESOLVED\n\n", selfIntro, preExisting, notResolved)
-}
-
 func WriteHeroPatterns(w io.Writer, res heropatterns.Report) {
-	fmt.Fprintln(w, "HERO-ACT (AUTOMATIC) — known bug patterns introduced and fixed this session, from captured history")
-	fmt.Fprintln(w, "(no self-report, no commits needed — requires `malveon watch` to have been running)")
+	fmt.Fprintln(w, "HERO-ACT CHECK — known bug patterns introduced and fixed this session, from captured history")
+	fmt.Fprintln(w, "(no self-report, no commits — requires `malveon watch` to have been running)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !res.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
@@ -174,6 +144,28 @@ func WriteUIOverlap(w io.Writer, findings []uioverlap.Finding) {
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "%d STRUCTURAL RISK\n\n", len(findings))
+}
+
+func WriteIncompleteness(w io.Writer, res incompleteness.Report) {
+	fmt.Fprintln(w, "INCOMPLETENESS CHECK — TODO/FIXME/HACK/XXX markers left in code changed this session")
+	fmt.Fprintln(w, "(code-only signal: presence is real proof the code admits a gap; absence proves nothing —")
+	fmt.Fprintln(w, " this can never substitute for the confidence check above, which tests an actual claim)")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+	if !res.Available {
+		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
+		return
+	}
+	if len(res.Findings) == 0 {
+		fmt.Fprintln(w, "nothing flagged — no incompleteness marker found in files changed this session")
+		fmt.Fprintln(w)
+		return
+	}
+	for _, f := range res.Findings {
+		fmt.Fprintf(w, "[%s] %s:%d\n", f.Marker, f.File, f.Line)
+		fmt.Fprintf(w, "  %s\n", f.Text)
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintf(w, "%d FLAGGED\n\n", len(res.Findings))
 }
 
 func WriteConfidence(w io.Writer, report confidence.Report) {
