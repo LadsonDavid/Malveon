@@ -182,10 +182,9 @@ One report, sectioned by check type (wiring / contract / overlap / frontend-over
 
 ### 3.4 Install / usage (what gets sent to the tester)
 
-- Clone the repo.
-- Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
+- Install the `malveon` binary — a one-line install script per OS (`install.sh` for macOS/Linux, `install.ps1` for Windows, added 2026-09-16) downloads the right release asset, puts it on PATH, and (macOS) clears the Gatekeeper quarantine flag, removing the download/chmod/PATH/Gatekeeper friction of doing it by hand. Manual download from Releases still works too. Single binary — no external tool prerequisite, the extractor is built in, not shelled out. Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
-- `malveon watch` (optional, but recommended) — run in the background for automatic hero-act detection with zero self-report (see 3.2.9). Ctrl-C when the agent's task is done. Without it, hero-act just reports itself unavailable — there's no manual fallback anymore.
+- `malveon watch` (optional, but recommended) — run in the background for the richer hero-act signal, zero self-report (see 3.2.9). Ctrl-C when the agent's task is done. Without it, hero-act still runs on the git-baseline signal alone (catches a bug introduced this session that's still present); only the "introduced and fixed within the session" signal specifically needs the watcher.
 - Agent does its implementation work, committing along the way like normal. Nothing manual required from here — no bug list to hand-type, no confidence summary to paste.
 - `malveon check` — no flags required. Auto-detects the plan file (see 3.1), reads confidence claims from commit messages automatically (see 3.2.7), scans session-changed files for incompleteness markers automatically (see 3.2.10), and reads known-bug-pattern findings from `malveon watch`'s captured history automatically if it was running (see 3.2.4). `--features`/`--claimed-summary` remain available to skip the automatic behavior or for scripts/CI.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.

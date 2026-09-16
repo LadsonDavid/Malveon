@@ -23,7 +23,21 @@ Every result is `PASS` / `FAIL` / or `NOT TESTED` (or the check-specific equival
 
 ## Install
 
-Download the binary for your OS from the [Releases](../../releases) page. No other install required — it's a single static binary, nothing else to set up.
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.ps1 | iex
+```
+
+Either one downloads the right binary for your machine, puts it on your PATH, and (macOS) clears the Gatekeeper quarantine flag so the first run doesn't get blocked. Open a new terminal afterward and run `malveon` to confirm.
+
+No Go, no toolchain, nothing else to set up — it's a single static binary either way.
+
+**Prefer to do it by hand?** Download the binary for your OS from the [Releases](../../releases) page directly, `chmod +x` it (macOS/Linux), and put it somewhere on your PATH.
 
 ## Use
 
