@@ -4,7 +4,7 @@
 
 ## Status
 
-**Phase:** All 6 checks (wiring, contract, overlap, not-in-plan, hero-act, confidence) + session lifecycle + multi-format plan input built, tested, and proven end-to-end through the real CLI. `beta-test/` is now its own real git repo with one clean commit, release binaries built for 4 platforms. Waiting on the founder's go-ahead before anything goes public (push + GitHub Release).
+**Phase:** All 7 checks (wiring, contract, overlap, frontend-overlap-risk, not-in-plan, hero-act, confidence) + session lifecycle + multi-format plan input built, tested, and proven end-to-end through the real CLI. `beta-test/` is now its own real git repo, release binaries built for 4 platforms. Waiting on the founder's go-ahead before anything goes public (push + GitHub Release).
 **Last updated:** 2026-09-16
 
 ## Locked decisions (quick reference)
@@ -14,15 +14,16 @@
 | Language | Go |
 | Parser | Own, pure Go — no cgo, no tree-sitter, graphify used as a design reference only |
 | v1 language coverage | Python, TypeScript, JavaScript, Go |
-| Checks in v1 | Wiring, Contract match, Overlap, Not-in-plan flag, Hero-act, Confidence (6 total) — **all 6 built** |
+| Checks in v1 | Wiring, Contract match, Overlap, Frontend-overlap-risk, Not-in-plan flag, Hero-act, Confidence (7 total) — **all 7 built** |
 | Plan input formats | JSON (`.json`), Markdown checklist (`.md`), plain text (anything else) — all normalized to the same internal `Feature` list |
 | Contract match v1 scope | HTTP method agreement only — full request/response body-shape comparison is later work, not built |
 | Overlap v1 scope | Same-method+same-path route collisions only (via `graph.PathsMatch`, wildcard-aware); no reachability analysis |
+| Frontend overlap v1 scope | Tailwind utility classes only ("Tailwind first," confirmed 2026-09-16) — flags `absolute`/`fixed` elements with no `relative`/`sticky` anywhere in the same file. Structural risk only, never a claim of confirmed visual overlap (that needs real rendering, deliberately not built). Plain-CSS cascade resolution and live-render confirmation both explicitly deferred. |
 | Confidence check | Cross-references a plain-text agent summary against the wiring verdict — doesn't parse confidence language as evidence on its own |
 | Hero-act granularity | File-level, not line-level |
 | Hero-act self-report input | Plain text, one reported bug per line |
 | Session-start snapshot | Automatic (`malveon session start` captures `git rev-parse HEAD`) |
-| Deferred (not in v1) | Recurring-failure memory, commit-blocking exit code |
+| Deferred (not in v1) | Recurring-failure memory, commit-blocking exit code, plain-CSS cascade resolution, live-render overlap confirmation |
 | First real tester | Feeling_Sun_6436 (Reddit) — committed to running it against their own real repo |
 | Distribution | Prebuilt binaries via GitHub Release (chosen over "clone and build," which needs Go installed on the tester's end) |
 
@@ -93,3 +94,4 @@ Waiting on founder confirmation to push `beta-test` to the public remote and cre
 - **2026-09-16 (manual verification + icon)** — Founder independently ran the full test suite and CLI on their own machine (PowerShell), confirming every verdict matched. Embedded the Malveon logo into the Windows binary via `rsrc`, verified genuinely present and cross-platform-safe.
 - **2026-09-16 (repo split + release prep)** — Found and fixed the private-repo-remote-pointed-at-public-repo leak risk. Split `beta-test/` into its own real git repo, one clean commit. Wrote `README.md`. Built 4-platform release binaries. Stopped before pushing/releasing pending explicit go-ahead.
 - **2026-09-16 (three more checks)** — Founder listed 6 real pain points and asked which were built; 3 were gaps (overlap detection, any-format plan input, and no way to catch the agent's stated confidence contradicting reality). Routed through `/software` (`refactoring` for scoping overlap detection precisely enough to avoid false positives; `philosophy-of-software-design` for keeping the multi-format plan loader a clean deep module instead of a leaky one). Built and tested all three: `internal/features` now accepts JSON/Markdown/plain-text; `internal/checks/overlap` catches colliding route registrations; `internal/checks/confidence` catches the agent's own claim contradicting the wiring verdict. All proven end-to-end through the real CLI, not just unit tests.
+- **2026-09-16 (frontend overlap — "overlap" clarified to mean visual UI overlap)** — Founder clarified pain point #3 meant *visual* frontend overlap (elements colliding on screen), not backend route collision. Worked through why that fundamentally needs real rendering (browser/layout engine) to confirm geometrically, which conflicts with the whole tool's no-live-testing identity. Walked through all 10 real CSS-overlap bug categories against what's actually statically knowable vs. render-dependent — the key finding: *stacking/positioning structure* is fully knowable from source, *actual geometric collision* is not. Designed a tiered plan (static structural-risk checks always-on; live confirmation kept separate, optional, and narrow) instead of an all-or-nothing choice. Founder chose "Tailwind first" over full plain-CSS cascade resolution for v1 (much smaller build, matches what most AI-agent-generated frontends actually use). Built `internal/checks/uioverlap`: flags `absolute`/`fixed` Tailwind classes with no `relative`/`sticky` context anywhere in the same file. Caught and fixed a real logic bug during testing (absolute/fixed were wrongly counted as their own "positioning context," silently canceling every finding) — found via the test suite failing, not assumed correct. Proven end-to-end. Now 7 checks total. Live-render confirmation and plain-CSS support both explicitly deferred, not built.

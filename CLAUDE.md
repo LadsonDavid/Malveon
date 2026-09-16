@@ -28,7 +28,7 @@ This is the single most important rule in this codebase, more important than any
 
 ## 3. v1 scope — build this, nothing else yet
 
-Expanded twice, deliberately, in 2026-09-11 and 2026-09-16 planning sessions — not silent scope creep. Original v1 was one check only (wiring); after working through the reasoning with the founder, five more checks were pulled forward from "deferred"/"not yet scoped" into v1 because each one directly answers a specific, named pain point (either from the original Reddit thread or from the founder's own follow-up review of what was still missing) and none of them requires live execution to implement honestly. What's still deferred (section 4) stays deferred for the same reason it always was: real ideas, but unproven until v1 holds up against a real stranger's repo.
+Expanded three times, deliberately, across 2026-09-11 and 2026-09-16 planning sessions — not silent scope creep. Original v1 was one check only (wiring); after working through the reasoning with the founder, six more checks were pulled forward from "deferred"/"not yet scoped" into v1 because each one directly answers a specific, named pain point (either from the original Reddit thread or from the founder's own follow-up review of what was still missing) and none of them requires live execution to implement honestly. What's still deferred (section 4) stays deferred for the same reason it always was: real ideas, but unproven until v1 holds up against a real stranger's repo.
 
 ### 3.1 Input
 
@@ -51,9 +51,9 @@ A features/plan file in whatever format the user already has it in — no fixed 
 
 IDs are generated from the name (slugified, de-duplicated) for Markdown/text input, since those formats don't carry an explicit ID.
 
-### 3.2 The six checks
+### 3.2 The seven checks
 
-All six read the same in-memory code graph, built once per run. No live server, no browser, no spinning up the tested app for any of them.
+The first six read the same in-memory code graph, built once per run. The seventh (3.2.8, frontend overlap risk) scans CSS/JSX directly rather than the route/call graph, since it's answering a different kind of question. No live server, no browser, no spinning up the tested app for any of them.
 
 #### 3.2.1 Wiring check — does a frontend action actually reach a real backend
 
@@ -122,9 +122,17 @@ Takes a plain-text file of the agent's own summary (`--claimed-summary`) — wha
 
 This intentionally does **not** parse confidence language as a standalone signal (it's never used as evidence on its own) — it exists purely to catch the gap between what the agent *said* and what was actually *verified* elsewhere in the report.
 
+#### 3.2.8 Frontend overlap risk — positioned elements with no positioning context
+
+Distinct from 3.2.6 (backend route collision) — this one is about CSS, specifically whether a visually overlapping layout is *likely*. This is deliberately never reported as "these two elements overlap on screen" — that fact depends on real rendered geometry (actual content size, viewport), which cannot be known without a browser. See CLAUDE.md's core rule (section 2): this stays a structural-risk signal, not a confirmed-overlap claim.
+
+**v1 scope, "Tailwind first" (confirmed 2026-09-16):** scans `.jsx`/`.tsx`/`.html`/`.vue` files for elements using Tailwind's `absolute`/`fixed` utility classes. A file where **no** element anywhere uses `relative` or `sticky` gets every `absolute`/`fixed` element in it flagged — a positioned element with no positioning context anywhere in the file will position against the page itself instead of its intended container, a well-known real bug, not a guess. `absolute`/`fixed` are deliberately excluded from counting as a "context" for each other — an escaping element sitting near another escaping element isn't a fix, it's the same problem twice.
+
+**Stated limitation:** file-scoped, not ancestor-precise. This does not trace the real JSX parent chain (that needs full tag-tree parsing — a real future addition); it only knows whether *any* positioning context exists anywhere in the file. Plain-CSS-file cascade resolution (the general case beyond Tailwind utility classes) is explicitly deferred, not built — see section 4.
+
 ### 3.3 Output
 
-One report, sectioned by check type (wiring / contract / overlap / not-in-plan / hero-act / confidence). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
+One report, sectioned by check type (wiring / contract / overlap / frontend-overlap-risk / not-in-plan / hero-act / confidence). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
 
 ### 3.4 Install / usage (what gets sent to the tester)
 
@@ -132,15 +140,17 @@ One report, sectioned by check type (wiring / contract / overlap / not-in-plan /
 - Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
 - (agent does its implementation work; ask it what bugs it fixed and save that to a plain-text file, one item per line)
-- `malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt` — runs all six checks, prints the report. `--bugs-reported` and `--claimed-summary` are both optional; the hero-act and confidence sections report themselves skipped, with a plain reason, if their input isn't given.
+- `malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt` — runs all seven checks, prints the report. `--bugs-reported` and `--claimed-summary` are both optional; the hero-act and confidence sections report themselves skipped, with a plain reason, if their input isn't given.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.
 
 ## 4. What's explicitly deferred (do not build yet)
 
 - Recurring-failure memory across sessions (a local history file flagging when the same category of failure shows up again).
 - Exit code that blocks a git commit on FAIL.
+- Plain-CSS-file cascade resolution for frontend overlap risk (3.2.8 currently covers Tailwind utility classes only).
+- Live-rendered visual overlap confirmation (an optional, clearly-separate mode that would actually check real geometry) — explicitly not folded into the static checks above; see the founder discussion in `session-context-full.md` section 7 for why this stays a separate, later decision rather than a quiet addition to v1.
 
-Both are real, grounded in specific Reddit commenters' pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all six checks in section 3) proves itself with a real person, not before. (Overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
+These are real, grounded in specific pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all seven checks in section 3) proves itself with a real person, not before. (Backend overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
 
 ## 5. Tech choices
 

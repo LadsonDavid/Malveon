@@ -12,6 +12,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
+	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 	"github.com/LadsonDavid/beta-test/internal/extractor"
 	"github.com/LadsonDavid/beta-test/internal/features"
@@ -90,6 +91,14 @@ func runCheck(args []string) {
 	report.WriteWiring(os.Stdout, wiringResults)
 	report.WriteContract(os.Stdout, contract.Run(g, fs))
 	report.WriteOverlap(os.Stdout, overlap.Run(g))
+
+	uiFindings, uiErr := uioverlap.Run(*root)
+	if uiErr != nil {
+		fmt.Fprintf(os.Stderr, "error scanning for frontend overlap risk: %v\n", uiErr)
+		os.Exit(1)
+	}
+	report.WriteUIOverlap(os.Stdout, uiFindings)
+
 	report.WritePlanAuthority(os.Stdout, planauthority.Run(g, fs, *root))
 
 	if *bugsReported != "" {

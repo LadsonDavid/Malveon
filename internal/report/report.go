@@ -13,6 +13,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
+	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 )
 
@@ -132,6 +133,25 @@ func WriteOverlap(w io.Writer, findings []overlap.Finding) {
 		fmt.Fprintln(w)
 	}
 	fmt.Fprintf(w, "%d OVERLAP\n\n", len(findings))
+}
+
+func WriteUIOverlap(w io.Writer, findings []uioverlap.Finding) {
+	fmt.Fprintln(w, "FRONTEND OVERLAP RISK — positioned elements with no positioning context in the file")
+	fmt.Fprintln(w, "(structural risk only — this is not a claim that two elements actually overlap on screen;")
+	fmt.Fprintln(w, " confirming that needs a real render, which this check deliberately doesn't do)")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+	if len(findings) == 0 {
+		fmt.Fprintln(w, "nothing flagged — no positioned elements without a positioning context found")
+		fmt.Fprintln(w)
+		return
+	}
+	for _, f := range findings {
+		fmt.Fprintf(w, "[STRUCTURAL RISK] %s:%d\n", f.File, f.Line)
+		fmt.Fprintf(w, "  classes: %s\n", f.Classes)
+		fmt.Fprintf(w, "  reason: %s\n", f.Reason)
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintf(w, "%d STRUCTURAL RISK\n\n", len(findings))
 }
 
 func WriteConfidence(w io.Writer, report confidence.Report) {
