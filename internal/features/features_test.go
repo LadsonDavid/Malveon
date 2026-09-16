@@ -161,3 +161,46 @@ func TestLoadDuplicateNamesGetDistinctIDs(t *testing.T) {
 		t.Errorf("expected distinct IDs for two features that slug the same, got %q twice", fs[0].ID)
 	}
 }
+
+// TestDetectRecursesIntoSubdirectories covers the real bug a reviewer
+// hit: a plan file kept in docs/PLAN.md (a completely normal place to
+// keep one) was invisible to the old top-level-only scan, so a much
+// weaker content-based match at the root won by default instead.
+func TestDetectRecursesIntoSubdirectories(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeIn(t, dir, filepath.Join("docs", "PLAN.md"), "- [ ] Refund button\n- [x] Cancel order\n")
+	writeIn(t, dir, "README.md", "# Getting started\n\n- [ ] Clone the repo\n- [ ] Run npm install\n")
+
+	candidates, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	want := filepath.Join(dir, "docs", "PLAN.md")
+	if len(candidates) != 1 || candidates[0] != want {
+		t.Fatalf("got %v, want exactly [%s] — name-based detection should find docs/PLAN.md and never match README.md by name", candidates, want)
+	}
+}
+
+// TestDetectSkipsNoiseDirectories proves recursion doesn't wander into
+// node_modules/.git/.next and accidentally treat something in there as
+// a plan candidate.
+func TestDetectSkipsNoiseDirectories(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"node_modules", ".git", ".next"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeIn(t, dir, filepath.Join(sub, "PLAN.md"), "- [ ] should never be found\n")
+	}
+
+	candidates, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("expected no candidates (all matches sit inside skipped dirs), got %v", candidates)
+	}
+}

@@ -103,17 +103,21 @@ func runCheck(args []string) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+		fromContentScan := false
 		if len(candidates) == 0 {
 			// Nothing matched by name — the plan could be called
 			// anything. Fall back to checking file content before
-			// giving up and asking the user to type a path.
+			// giving up and asking the user to type a path. A content
+			// match is a guess, not a deliberate name, so it always
+			// needs confirming — see resolveFeaturesPath.
 			candidates, err = features.DetectByContent(*root)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 				os.Exit(1)
 			}
+			fromContentScan = true
 		}
-		resolved, err := resolveFeaturesPath(candidates, os.Stdin, os.Stderr, isInteractive())
+		resolved, err := resolveFeaturesPath(candidates, fromContentScan, os.Stdin, os.Stderr, isInteractive())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			usage()

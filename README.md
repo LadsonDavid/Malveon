@@ -68,10 +68,10 @@ All optional — leave any out and that section of the report shows itself skipp
 
 ## The plan file
 
-Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename required. Auto-detection tries two ways:
+Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename or location required (it searches the whole project tree, skipping `node_modules`/`.git`/build output). Auto-detection tries two ways:
 
-1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension.
-2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`.
+1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension, wherever it actually lives (`docs/PLAN.md` works fine). Found this way → used automatically, announced, never asked about.
+2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`. This is a guess, not a deliberate name match, so even a single result gets shown and confirmed (`use it? [Y/n]`) before it's trusted — it doesn't get auto-picked the way a name match does.
 
 If nothing matches either way, or more than one file looks right, it asks — never guesses.
 

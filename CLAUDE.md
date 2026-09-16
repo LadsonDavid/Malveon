@@ -53,15 +53,18 @@ IDs are generated from the name (slugified, de-duplicated) for Markdown/text inp
 
 **Finding the plan file (confirmed 2026-09-16 — the command shouldn't need memorizing):** `--features <path>` is optional, not required. When omitted, resolution runs in two tiers:
 
-1. `features.Detect(root)` — top-level only, not recursive — looks for files whose *name* contains "plan"/"feature"/"checklist"/"todo" (case-insensitive) with a supported extension. Fast, precise, the common case.
+1. `features.Detect(root)` — looks for files whose *name* contains "plan"/"feature"/"checklist"/"todo" (case-insensitive) with a supported extension. Fast, precise, the common case.
 2. If that finds nothing (the plan could be named anything — confirmed 2026-09-16), `features.DetectByContent(root)` falls back to checking file *content*: a `.json` file is a candidate only if it parses as an array of objects each with a non-empty `name` field (the real shape this tool expects, not just "is it JSON"); a `.md`/`.markdown` file is a candidate only if it has at least 2 real checklist-syntax lines. `.txt` is deliberately excluded from this fallback — a bare text file with no name hint and no structural markers has no reliable content signal, and guessing there would break the tool's own rule.
 
-Whichever tier produced the candidates, the same resolution applies:
+**Both tiers recurse the whole tree now (fixed 2026-09-16, was top-level-only).** A real test run against a project keeping its plan in `docs/PLAN.md` found nothing at the root, fell through to the content tier, and a README.md that merely had checklist-looking lines won by default — a confidently wrong result from the tool's own plan detection, the exact failure mode this whole tool exists to catch elsewhere. Recursion skips the same noise directories the extractor already does (`.git`, `node_modules`, `vendor`, `dist`, `build`, `.next`, `.malveon`).
 
-- Exactly one candidate → used automatically, and the choice is printed (`using plan file: PLAN.md`) — never silent.
-- More than one candidate → the tool asks which one, interactively (numbered list, bare Enter picks the first).
+Whichever tier produced the candidates, resolution differs by *how* they were found:
+
+- **Exactly one candidate, found by name** → used automatically, and the choice is printed (`using plan file: docs/PLAN.md`) — never silent. A deliberately-named file is a strong enough signal not to need confirming.
+- **Exactly one candidate, found only by content (fixed 2026-09-16, was also auto-used before)** → a content match is a guess, not a deliberate name, so it's shown and confirmed (`found a possible plan file by content, not by name: README.md — use it? [Y/n]`) before use, never silently trusted. Saying no prompts for the real path directly.
+- More than one candidate, from either tier → the tool asks which one, interactively (numbered list, bare Enter picks the first).
 - No candidates (from either tier) → the tool asks for a path directly.
-- Not running in a real terminal (stdin isn't a TTY — scripts/CI) and the answer is ambiguous or missing → fails immediately with a clear error naming the candidates, rather than hanging waiting for input that will never come.
+- Not running in a real terminal (stdin isn't a TTY — scripts/CI) and the answer is ambiguous, missing, or needs confirming → fails immediately with a clear error naming the candidate(s), rather than hanging waiting for input that will never come.
 
 Same rule as everywhere else in this tool: never guess, and when unsure, ask instead of picking silently. `--features` still works exactly as before and skips the whole detection/prompt step, which is what scripts and CI should use.
 

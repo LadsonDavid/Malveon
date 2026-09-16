@@ -21,22 +21,55 @@ func isInteractive() bool {
 }
 
 // resolveFeaturesPath decides which plan file to use when --features
-// wasn't given: exactly one candidate found in root is used automatically
-// (and announced, never silent); more than one or none means asking,
-// never guessing. w is where the prompt/announcement is written (stderr
-// in production, so stdout output stays clean for piping); r is where the
-// answer is read from (stdin in production).
-func resolveFeaturesPath(candidates []string, r io.Reader, w io.Writer, interactive bool) (string, error) {
+// wasn't given: exactly one candidate found by name (fromContentScan
+// false) is used automatically and announced, never silent — a
+// deliberately-named "plan"/"feature"/"checklist"/"todo" file is a
+// strong enough signal not to need confirming. Exactly one candidate
+// found only by content (fromContentScan true) is a guess, not a
+// deliberate name, and must be confirmed before use — see
+// features.DetectByContent's doc comment for the real run that proved
+// this matters: a README.md that merely had checklist-looking lines
+// almost got silently used as the plan instead of the real, differently
+// named file it actually was. More than one candidate, from either tier,
+// or none at all, still means asking, never guessing. w is where the
+// prompt/announcement is written (stderr in production, so stdout output
+// stays clean for piping); r is where the answer is read from (stdin in
+// production).
+func resolveFeaturesPath(candidates []string, fromContentScan bool, r io.Reader, w io.Writer, interactive bool) (string, error) {
+	// One scanner for the whole call: the content-scan-rejected path below
+	// reads a confirmation answer and then, on "no," a follow-up path —
+	// two reads from the same underlying stream. A fresh bufio.Scanner per
+	// read loses whatever the first one had already buffered, so every
+	// read in this function must go through this one shared scanner.
+	scanner := bufio.NewScanner(r)
+
 	switch len(candidates) {
 	case 1:
-		fmt.Fprintf(w, "using plan file: %s\n", candidates[0])
-		return candidates[0], nil
+		if !fromContentScan {
+			fmt.Fprintf(w, "using plan file: %s\n", candidates[0])
+			return candidates[0], nil
+		}
+		if !interactive {
+			return "", fmt.Errorf("found a possible plan file by content, not by name: %s — no terminal to confirm it, pass --features explicitly", candidates[0])
+		}
+		fmt.Fprintf(w, "found a possible plan file by content, not by name: %s\n", candidates[0])
+		fmt.Fprint(w, "use it? [Y/n]: ")
+		answer, err := readLine(scanner)
+		if err != nil {
+			return "", err
+		}
+		switch strings.ToLower(answer) {
+		case "", "y", "yes":
+			return candidates[0], nil
+		}
+		fmt.Fprint(w, "Enter the path to your plan/checklist file: ")
+		return readLine(scanner)
 	case 0:
 		if !interactive {
 			return "", fmt.Errorf("no plan file found automatically, and no terminal to ask — pass --features explicitly")
 		}
 		fmt.Fprint(w, "no plan file found automatically. Enter the path to your plan/checklist file: ")
-		return readLine(r)
+		return readLine(scanner)
 	default:
 		if !interactive {
 			return "", fmt.Errorf("found more than one possible plan file (%s) — pass one explicitly with --features", strings.Join(candidates, ", "))
@@ -46,7 +79,7 @@ func resolveFeaturesPath(candidates []string, r io.Reader, w io.Writer, interact
 			fmt.Fprintf(w, "  %d) %s\n", i+1, c)
 		}
 		fmt.Fprint(w, "which one is your plan? [1]: ")
-		answer, err := readLine(r)
+		answer, err := readLine(scanner)
 		if err != nil {
 			return "", err
 		}
@@ -61,8 +94,7 @@ func resolveFeaturesPath(candidates []string, r io.Reader, w io.Writer, interact
 	}
 }
 
-func readLine(r io.Reader) (string, error) {
-	scanner := bufio.NewScanner(r)
+func readLine(scanner *bufio.Scanner) (string, error) {
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return "", err
