@@ -4,7 +4,7 @@
 
 ## Status
 
-**Phase:** All 7 checks (wiring, contract, overlap, frontend-overlap-risk, not-in-plan, hero-act, confidence) + session lifecycle + multi-format plan input + plan-file auto-detection + automatic confidence-claim sourcing built, tested, and proven end-to-end through the real CLI. `malveon check` now runs with zero required manual steps except hero-act's `--bugs-reported` (kept manual deliberately — see decisions table). `beta-test/` is now its own real git repo, release binaries built for 4 platforms. Waiting on the founder's go-ahead before anything goes public (push + GitHub Release).
+**Phase:** All 8 checks (wiring, contract, overlap, frontend-overlap-risk, not-in-plan, hero-act manual, hero-act automatic, confidence) + session lifecycle + `malveon watch` background capture + multi-format plan input + plan-file auto-detection + automatic confidence-claim sourcing built, tested, and proven end-to-end through the real CLI. Only fully manual step left in the whole tool: hero-act's `--bugs-reported`, and even that's now optional since `malveon watch` covers the automatic path. `beta-test/` is now its own real git repo, release binaries built for 4 platforms (not yet rebuilt with the `fsnotify` dependency — needed before the next release). Waiting on the founder's go-ahead before anything goes public (push + GitHub Release).
 **Last updated:** 2026-09-16
 
 ## Locked decisions (quick reference)
@@ -14,13 +14,13 @@
 | Language | Go |
 | Parser | Own, pure Go — no cgo, no tree-sitter, graphify used as a design reference only |
 | v1 language coverage | Python, TypeScript, JavaScript, Go |
-| Checks in v1 | Wiring, Contract match, Overlap, Frontend-overlap-risk, Not-in-plan flag, Hero-act, Confidence (7 total) — **all 7 built** |
+| Checks in v1 | Wiring, Contract match, Overlap, Frontend-overlap-risk, Not-in-plan flag, Hero-act (manual), Hero-act (automatic), Confidence (8 total) — **all 8 built** |
 | Plan input formats | JSON (`.json`), Markdown checklist (`.md`), plain text (anything else) — all normalized to the same internal `Feature` list |
 | Contract match v1 scope | HTTP method agreement only — full request/response body-shape comparison is later work, not built |
 | Overlap v1 scope | Same-method+same-path route collisions only (via `graph.PathsMatch`, wildcard-aware); no reachability analysis |
 | Frontend overlap v1 scope | Tailwind utility classes only ("Tailwind first," confirmed 2026-09-16) — flags `absolute`/`fixed` elements with no `relative`/`sticky` anywhere in the same file. Structural risk only, never a claim of confirmed visual overlap (that needs real rendering, deliberately not built). Plain-CSS cascade resolution and live-render confirmation both explicitly deferred. |
 | Confidence check | Claim source is automatic by default — reads commit messages since session start (`gitutil.CommitMessagesSince`), no manual prompt needed. `--claimed-summary` still works as an explicit override. Cross-references whatever claim it finds against the wiring verdict — doesn't parse confidence language as evidence on its own |
-| Hero-act automatic sourcing | Considered and rejected — commit-message sourcing would be circular here (trusting the commit's own "this is a fix" label), unlike confidence's automatic sourcing which doesn't need that label. Stays manual (`--bugs-reported`) until real automatic alternatives (background snapshotting + test-suite pass/fail signal) are built |
+| Hero-act automatic sourcing | Commit-message sourcing considered and rejected (circular — see below). Built the real alternative instead: `malveon watch` (`internal/watch`, `fsnotify`) captures debounced file snapshots independent of git; `internal/checks/heropatterns` checks captured history for a small, named catalog of known bug patterns (JS/TS assignment-in-condition, Go empty-error-handling, Python bare-except) that appeared in an earlier snapshot and are gone from the current version. Zero self-report, zero commit dependency. Manual `--bugs-reported` still available/still works alongside it. |
 | Hero-act granularity | File-level, not line-level |
 | Hero-act self-report input | Plain text, one reported bug per line |
 | Session-start snapshot | Automatic (`malveon session start` captures `git rev-parse HEAD`) |
@@ -39,6 +39,8 @@
 - **`internal/features`** — multi-format plan loader (JSON/Markdown/plain-text), one unchanged external signature (`Load(path)`) regardless of format — routed through `philosophy-of-software-design` to keep it a deep module instead of leaking format concepts to callers. Slug-based ID generation with de-dup. Tested against all 3 formats.
 - **`internal/gitutil`** — shells out to system `git`. Tested against real temp repos.
 - **`internal/session`** — `Start`/`Load` for `.malveon/session.json`. Tested.
+- **`internal/watch`** — background file-watcher (`fsnotify`, first external dependency), continual cadence, debounced snapshots to `.malveon/history/`, own liveness heartbeat/status for honest crash detection. Tested with real fsnotify events against a real temp dir (not mocked) — captures correct content per generation, sequential seq numbers, correct running→stopped status transitions.
+- **`internal/checks/heropatterns`** — reads `internal/watch` history, flags a known bug pattern present in an earlier snapshot and absent from the current file. 3-pattern catalog (JS/TS assignment-in-condition, Go empty-error-handling, Python bare-except). Tested end-to-end with a real watch session (introduce bug → fix it → verify detection) and the unavailable-without-watch case.
 - **`internal/checks/wiring`** — PASS/FAIL/NOT TESTED. Proven end-to-end.
 - **`internal/checks/contract`** — CONTRACT MATCH/MISMATCH/NOT TESTED. Proven end-to-end.
 - **`internal/checks/overlap`** — new. Groups `Extracted`, known-method routes by `graph.PathsMatch` equality; flags groups >1. Scoped via `refactoring` skill guidance to exclude same-path/different-method pairs and unresolved-method pairs from ever being compared. Tested with 4 scenario pairs (true literal collision, wildcard-vs-literal collision, different-method non-collision, unresolved-method non-collision, dynamic-path non-collision) — all correct.
@@ -54,32 +56,35 @@
 
 - [x] `extractor`, `graph` — pure-Go, all 4 languages, tested
 - [x] `features` — multi-format plan loader (JSON/Markdown/text), tested
-- [x] `wiring`, `contract`, `overlap`, `planauthority`, `heroact`, `confidence` — all 6 checks, all proven end-to-end
+- [x] `wiring`, `contract`, `overlap`, `planauthority`, `heroact` (manual), `heropatterns` (automatic), `confidence` — all 8 checks, all proven end-to-end
 - [x] `session` lifecycle
-- [x] `report`, `cli` — all 6 sections wired, both commands run for real
+- [x] `watch` — background fsnotify-based capture, own liveness tracking, tested with real file events
+- [x] `report`, `cli` — all 8 sections wired, `session start`/`watch`/`check` all run for real
 - [x] Repo split — `beta-test/` is its own git repo, correct remote, private workspace repo's leak risk closed
-- [x] Release binaries built (`dist/`: windows-amd64, darwin-arm64, darwin-amd64, linux-amd64) — cross-compilation reverified after the icon addition
 - [x] Windows icon embedded (`rsrc_windows_amd64.syso`), verified genuinely present via .NET, verified it doesn't affect non-Windows builds
 - [x] README.md written (public-facing entry point, distinct from `CLAUDE.md`)
+- [ ] **Rebuild release binaries with the `fsnotify` dependency** — the 4 existing `dist/` binaries predate `malveon watch`, need a fresh build before anything ships
 - [ ] **Push to the public remote** — held pending explicit founder go-ahead (public, hard-to-reverse action)
-- [ ] **Create the GitHub Release** with the 4 binaries attached — same, held pending go-ahead
+- [ ] **Create the GitHub Release** with the rebuilt binaries attached — same, held pending go-ahead
 - [ ] Python/Go fixture repos — still unit-tested in isolation only, not proven end-to-end through a full multi-file fixture the way JS/TS is
 - [ ] Message drafted to Feeling_Sun_6436
 
 ## Known, stated limitations (not gaps hiding as bugs)
 
 - **Contract match is method-agreement only** — no request/response body comparison yet.
-- **Hero-act is file-level, not line-level.**
+- **Hero-act (manual) is file-level, not line-level.**
+- **Hero-act (automatic) only catches its 3-pattern catalog** — not a general "was this a real bug" judgment (not resolvable from static snapshots alone), and requires `malveon watch` to have actually been running without a gap.
 - **Overlap has no reachability analysis** — a duplicate registration inside dead code still counts.
 - **Confidence check doesn't parse confidence language as standalone evidence** — it only ever cross-references a claim against the wiring verdict, by design.
 - **JS `axios({method:'post', url:'/x'})` object-call style, and Flask's bare `@app.route(...)` without an explicit method, aren't parsed** — left `NOT TESTED` rather than guessed.
+- **`malveon watch` doesn't work over NFS/SMB** (fsnotify's own constraint) and can fail to start on very large repos if the OS's inotify-watch/file-descriptor limits are hit — surfaced as a real error, never swallowed.
 
 ## Demo readiness (before sending to Feeling_Sun_6436)
 
 - [x] Example repo with a wired feature, a broken one, a dynamic-path one, a method-mismatch one (`testdata/fixture`)
 - [x] Sample plain-text hero-act and confidence inputs + expected results (proved manually this session)
-- [x] Full expected terminal output captured from real runs
-- [x] Release binaries built
+- [x] Full expected terminal output captured from real runs, including `malveon watch` catching a real bug live
+- [ ] Release binaries rebuilt with `fsnotify` (see build checklist)
 - [ ] Actually pushed + released (blocked on founder go-ahead)
 - [ ] Message drafted to Feeling_Sun_6436
 
@@ -100,3 +105,4 @@ Waiting on founder confirmation to push `beta-test` to the public remote and cre
 - **2026-09-16 (plan file auto-detection, part 2 — content fallback)** — Founder pointed out the real gap: name-based detection does nothing for a plan file with no name hint at all (`sprint3.json`, `notes.md`, anything). Built `features.DetectByContent(root)` as a fallback tier when name-matching finds nothing: `.json` files count only if they actually parse as an array of objects with a `name` field (the real expected shape, not just "valid JSON"); `.md` files count only with ≥2 real checklist-syntax lines. `.txt` deliberately excluded from this fallback — no reliable content signal without a name hint, and guessing there would break the tool's own core rule. Proven end-to-end: a plan named `sprint3.json` with zero name hints got found and used automatically, `README.md` correctly ignored.
 - **2026-09-16 (hero-act automation attempt — rejected, correctly)** — Proposed sourcing hero-act's bug list automatically from commit messages (fix-keyword scan). Founder correctly rejected it: trusting a commit message's own "this is a fix" label as evidence is circular — the exact self-report this check exists to not trust, just relocated from chat into git, and gameable by simply not writing "fix" in the message. Routed through `/software` → `why-programs-fail`'s omniscient-debugging concept to find a genuinely self-report-free alternative: confirmed that fully automatic detection needs *some* record of the intermediate broken state, and without either a self-report or actual test execution, there's no way to distinguish "the agent fixed a real bug" from "the agent iterated normally while writing new code" from pure snapshots alone — an information-theoretic limit, not a design gap. Scoped the real path forward (background snapshotting + a known bad-pattern catalog now, test-suite pass/fail signal later) but did not build it this session — documented as deferred in `CLAUDE.md` section 4, hero-act stays on manual `--bugs-reported`.
 - **2026-09-16 (confidence check automated)** — Same request applied to the confidence check, but this time it holds up: unlike hero-act, confidence-check doesn't need the commit message to be honestly self-labeled as anything — it only captures whatever confident language the agent actually wrote, then checks that claim against a verdict computed entirely independently (wiring). An agent writing modest commit messages just produces more `NOT TESTED`, not an evasion. Built `gitutil.CommitMessagesSince` and rewired `confidence.Run` to read from it automatically when `--claimed-summary` isn't given (requires a session to have been started). Proven end-to-end with real git commits and zero flags: a commit message claiming "Cancel order is done and working perfectly, ready to ship" was read automatically and correctly flagged as a CONFIDENCE MISMATCH against the real (failing) wiring result.
+- **2026-09-16 (hero-act automation, real version — `malveon watch`)** — Founder pushed back again: didn't want the "find it from code, don't depend on commits" idea dropped just because a single before/after diff can't see an intermediate state. Explained the actual information-theoretic wall with a room/table analogy (you can't tell a messy table got cleaned if you weren't watching), then reframed correctly: the fix isn't smarter analysis of the final diff, it's a real "camera" — a tool-owned process, independent of git and independent of any self-report. Routed through `/software` (`evolutionary-architectures` for cadence — confirmed **continual**, event-driven capture is the only cadence without a structural blind spot, not triggered-only or fixed-interval) plus a live web search (fsnotify confirmed as the standard, actively-maintained, pure-Go cross-platform watcher — first external dependency this project has taken on, verified it doesn't reintroduce cgo or break cross-compilation). Built: `internal/watch` (fsnotify-based recursive watcher, manual recursive-add and Chmod-filtering per the search results, debounced snapshots to `.malveon/history/`, its own liveness heartbeat so a crashed watcher can't silently masquerade as complete history) and `internal/checks/heropatterns` (a 3-pattern known-bug catalog — JS/TS assignment-in-condition, Go empty-error-handling, Python bare-except — flagging a pattern present in an earlier snapshot and gone from the current file). Wired as `malveon watch` (new CLI command) and a new automatic hero-act section in `check`, running alongside the existing manual `--bugs-reported` path rather than replacing it. Proven fully end-to-end through the real CLI: started `malveon watch` as a real background process, wrote a Go file with a real empty-error-handling bug, "fixed" it seconds later, and `malveon check` — while the watcher was still live — correctly flagged it automatically, zero commits, zero self-report. (Hit and worked around a Windows-specific test-environment snag: git-bash's `kill -INT` doesn't reliably deliver a Windows console Ctrl+C to a separate process, so the demo script hung waiting for graceful shutdown — resolved with `taskkill`; not a bug in the watcher itself, which already had a clean `context.Done()` shutdown path proven by its own Go test.)

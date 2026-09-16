@@ -11,6 +11,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
+	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
@@ -115,6 +116,27 @@ func WriteHeroAct(w io.Writer, res heroact.Result) {
 		}
 	}
 	fmt.Fprintf(w, "%d SELF-INTRODUCED, %d PRE-EXISTING, %d NOT RESOLVED\n\n", selfIntro, preExisting, notResolved)
+}
+
+func WriteHeroPatterns(w io.Writer, res heropatterns.Report) {
+	fmt.Fprintln(w, "HERO-ACT (AUTOMATIC) — known bug patterns introduced and fixed this session, from captured history")
+	fmt.Fprintln(w, "(no self-report, no commits needed — requires `malveon watch` to have been running)")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+	if !res.Available {
+		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
+		return
+	}
+	if len(res.Findings) == 0 {
+		fmt.Fprintln(w, "nothing flagged — no known bug pattern appeared and then disappeared this session")
+		fmt.Fprintln(w)
+		return
+	}
+	for _, f := range res.Findings {
+		fmt.Fprintf(w, "[SELF-INTRODUCED, FOUND & FIXED SAME SESSION] %s — %s\n", f.File, f.Pattern)
+		fmt.Fprintf(w, "  reason: %s\n", f.Reason)
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintf(w, "%d SELF-INTRODUCED\n\n", len(res.Findings))
 }
 
 func WriteOverlap(w io.Writer, findings []overlap.Finding) {

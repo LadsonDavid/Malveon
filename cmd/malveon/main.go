@@ -3,13 +3,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
+	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
 	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
@@ -18,6 +22,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/features"
 	"github.com/LadsonDavid/beta-test/internal/report"
 	"github.com/LadsonDavid/beta-test/internal/session"
+	"github.com/LadsonDavid/beta-test/internal/watch"
 )
 
 func main() {
@@ -31,6 +36,8 @@ func main() {
 		runCheck(os.Args[2:])
 	case "session":
 		runSession(os.Args[2:])
+	case "watch":
+		runWatch(os.Args[2:])
 	default:
 		usage()
 		os.Exit(2)
@@ -40,6 +47,9 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage:")
 	fmt.Fprintln(os.Stderr, "  malveon session start [--root <path>]")
+	fmt.Fprintln(os.Stderr, "  malveon watch [--root <path>]")
+	fmt.Fprintln(os.Stderr, "    Run this in the background before the agent's task begins, for automatic")
+	fmt.Fprintln(os.Stderr, "    hero-act detection with no self-report needed. Ctrl-C to stop.")
 	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
@@ -62,6 +72,22 @@ func runSession(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("session started at %s\n", st.StartRef)
+}
+
+func runWatch(args []string) {
+	fset := flag.NewFlagSet("watch", flag.ExitOnError)
+	root := fset.String("root", ".", "repo root to watch")
+	fset.Parse(args)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	fmt.Printf("watching %s — Ctrl-C to stop\n", *root)
+	if err := watch.Run(ctx, watch.Options{Root: *root}); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("stopped")
 }
 
 func runCheck(args []string) {
@@ -129,6 +155,7 @@ func runCheck(args []string) {
 	} else {
 		report.WriteHeroAct(os.Stdout, heroact.Result{Available: false, Reason: "no --bugs-reported file given"})
 	}
+	report.WriteHeroPatterns(os.Stdout, heropatterns.Run(*root))
 
 	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *root, *claimedSummary))
 }
