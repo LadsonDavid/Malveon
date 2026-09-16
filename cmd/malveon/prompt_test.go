@@ -6,17 +6,35 @@ import (
 	"testing"
 )
 
-func TestResolveFeaturesPathSingleCandidate(t *testing.T) {
+func TestResolveFeaturesPathSingleNameCandidateStillAsks(t *testing.T) {
 	var out bytes.Buffer
-	path, err := resolveFeaturesPath([]string{"PLAN.md"}, false, strings.NewReader(""), &out, true)
+	path, err := resolveFeaturesPath([]string{"PLAN.md"}, false, strings.NewReader("\n"), &out, true)
 	if err != nil {
 		t.Fatalf("resolveFeaturesPath: %v", err)
 	}
 	if path != "PLAN.md" {
-		t.Errorf("got %q, want PLAN.md", path)
+		t.Errorf("got %q, want PLAN.md (confirmed via bare enter)", path)
 	}
-	if !strings.Contains(out.String(), "PLAN.md") {
-		t.Errorf("expected the auto-pick to be announced, got: %q", out.String())
+	if !strings.Contains(out.String(), "use it?") {
+		t.Errorf("expected a confirmation prompt even for a single name match, got: %q", out.String())
+	}
+}
+
+func TestResolveFeaturesPathSingleNameCandidateRejectedFallsBackToManualPath(t *testing.T) {
+	var out bytes.Buffer
+	path, err := resolveFeaturesPath([]string{"PLAN.md"}, false, strings.NewReader("n\ndocs/PLAN.md\n"), &out, true)
+	if err != nil {
+		t.Fatalf("resolveFeaturesPath: %v", err)
+	}
+	if path != "docs/PLAN.md" {
+		t.Errorf("got %q, want docs/PLAN.md (typed after rejecting the suggested name match)", path)
+	}
+}
+
+func TestResolveFeaturesPathSingleNameCandidateNonInteractiveFails(t *testing.T) {
+	var out bytes.Buffer
+	if _, err := resolveFeaturesPath([]string{"PLAN.md"}, false, strings.NewReader(""), &out, false); err == nil {
+		t.Fatal("expected an error: even a name match can't be confirmed without a terminal")
 	}
 }
 
@@ -75,8 +93,8 @@ func TestResolveFeaturesPathInvalidChoice(t *testing.T) {
 
 // TestResolveFeaturesPathContentScanRequiresConfirmation covers the real
 // bug this session found: a content-only match (a guess, not a
-// deliberate name) must never be silently trusted the way a name match
-// is, even when it's the only candidate.
+// deliberate name) must never be silently trusted, even when it's the
+// only candidate.
 func TestResolveFeaturesPathContentScanRequiresConfirmation(t *testing.T) {
 	var out bytes.Buffer
 	path, err := resolveFeaturesPath([]string{"README.md"}, true, strings.NewReader("\n"), &out, true)

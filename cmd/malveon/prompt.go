@@ -21,38 +21,33 @@ func isInteractive() bool {
 }
 
 // resolveFeaturesPath decides which plan file to use when --features
-// wasn't given: exactly one candidate found by name (fromContentScan
-// false) is used automatically and announced, never silent — a
-// deliberately-named "plan"/"feature"/"checklist"/"todo" file is a
-// strong enough signal not to need confirming. Exactly one candidate
-// found only by content (fromContentScan true) is a guess, not a
-// deliberate name, and must be confirmed before use — see
-// features.DetectByContent's doc comment for the real run that proved
-// this matters: a README.md that merely had checklist-looking lines
-// almost got silently used as the plan instead of the real, differently
-// named file it actually was. More than one candidate, from either tier,
-// or none at all, still means asking, never guessing. w is where the
-// prompt/announcement is written (stderr in production, so stdout output
-// stays clean for piping); r is where the answer is read from (stdin in
-// production).
+// wasn't given. No assumptions, ever, confirmed 2026-09-16 after a real
+// external test run silently trusted a wrong single candidate: every
+// candidate this function returns — whether found by a deliberate name
+// match or only by a weaker content guess, whether there's one or many —
+// gets shown to the user and requires an explicit answer before it's
+// used. The only way to skip being asked is to pass --features directly.
+// w is where the prompt/announcement is written (stderr in production,
+// so stdout output stays clean for piping); r is where the answer is
+// read from (stdin in production).
 func resolveFeaturesPath(candidates []string, fromContentScan bool, r io.Reader, w io.Writer, interactive bool) (string, error) {
-	// One scanner for the whole call: the content-scan-rejected path below
-	// reads a confirmation answer and then, on "no," a follow-up path —
-	// two reads from the same underlying stream. A fresh bufio.Scanner per
+	// One scanner for the whole call: the "no" branch below reads a
+	// confirmation answer and then, on rejection, a follow-up path — two
+	// reads from the same underlying stream. A fresh bufio.Scanner per
 	// read loses whatever the first one had already buffered, so every
 	// read in this function must go through this one shared scanner.
 	scanner := bufio.NewScanner(r)
 
 	switch len(candidates) {
 	case 1:
-		if !fromContentScan {
-			fmt.Fprintf(w, "using plan file: %s\n", candidates[0])
-			return candidates[0], nil
+		label := "by name"
+		if fromContentScan {
+			label = "by content, not by name"
 		}
 		if !interactive {
-			return "", fmt.Errorf("found a possible plan file by content, not by name: %s — no terminal to confirm it, pass --features explicitly", candidates[0])
+			return "", fmt.Errorf("found a possible plan file (%s): %s — no terminal to confirm it, pass --features explicitly", label, candidates[0])
 		}
-		fmt.Fprintf(w, "found a possible plan file by content, not by name: %s\n", candidates[0])
+		fmt.Fprintf(w, "found a possible plan file (%s): %s\n", label, candidates[0])
 		fmt.Fprint(w, "use it? [Y/n]: ")
 		answer, err := readLine(scanner)
 		if err != nil {

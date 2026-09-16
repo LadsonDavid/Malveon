@@ -58,15 +58,14 @@ IDs are generated from the name (slugified, de-duplicated) for Markdown/text inp
 
 **Both tiers recurse the whole tree now (fixed 2026-09-16, was top-level-only).** A real test run against a project keeping its plan in `docs/PLAN.md` found nothing at the root, fell through to the content tier, and a README.md that merely had checklist-looking lines won by default — a confidently wrong result from the tool's own plan detection, the exact failure mode this whole tool exists to catch elsewhere. Recursion skips the same noise directories the extractor already does (`.git`, `node_modules`, `vendor`, `dist`, `build`, `.next`, `.malveon`).
 
-Whichever tier produced the candidates, resolution differs by *how* they were found:
+**No assumptions, ever (tightened again 2026-09-16, same day).** The founder's first reaction to the fix above was still "no — directly ask which file is the plan file, there shouldn't be any assumptions anymore," even for a single confident name match. So the earlier "exactly one name match → auto-use and announce" shortcut is gone too. Every candidate this resolves — one or many, found by name or only by content — now gets shown to the user and requires an explicit answer:
 
-- **Exactly one candidate, found by name** → used automatically, and the choice is printed (`using plan file: docs/PLAN.md`) — never silent. A deliberately-named file is a strong enough signal not to need confirming.
-- **Exactly one candidate, found only by content (fixed 2026-09-16, was also auto-used before)** → a content match is a guess, not a deliberate name, so it's shown and confirmed (`found a possible plan file by content, not by name: README.md — use it? [Y/n]`) before use, never silently trusted. Saying no prompts for the real path directly.
+- **Exactly one candidate** → shown and confirmed (`found a possible plan file (by name): docs/PLAN.md — use it? [Y/n]`, or `(by content, not by name)` for a weaker match) before use. Saying no prompts for the real path directly.
 - More than one candidate, from either tier → the tool asks which one, interactively (numbered list, bare Enter picks the first).
 - No candidates (from either tier) → the tool asks for a path directly.
-- Not running in a real terminal (stdin isn't a TTY — scripts/CI) and the answer is ambiguous, missing, or needs confirming → fails immediately with a clear error naming the candidate(s), rather than hanging waiting for input that will never come.
+- Not running in a real terminal (stdin isn't a TTY — scripts/CI) → fails immediately with a clear error naming the candidate(s), rather than hanging waiting for input that will never come or silently assuming an answer.
 
-Same rule as everywhere else in this tool: never guess, and when unsure, ask instead of picking silently. `--features` still works exactly as before and skips the whole detection/prompt step, which is what scripts and CI should use.
+Same rule as everywhere else in this tool, now applied to its own plan-detection step without exception: never guess, and when unsure — which, per the founder's correction, means *always*, unless `--features` was passed explicitly — ask instead of picking silently. `--features <path>` remains the only way to skip being asked, which is what scripts and CI should use.
 
 ### 3.2 The nine checks
 

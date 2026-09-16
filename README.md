@@ -51,7 +51,7 @@ malveon watch &   # background — watches the code as the agent works, Ctrl-C w
 malveon check
 ```
 
-That's it. `malveon check` with no flags: looks for a plan file in the current folder automatically (asks if it's ambiguous, never guesses), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, and reads known-bug-pattern findings from whatever `malveon watch` captured while it ran — nothing to ask the agent, nothing to paste, for any of it.
+That's it. `malveon check` with no flags: looks for a plan file across the whole project automatically and always confirms with you before using it (never assumes, even a clear single match — see below), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, and reads known-bug-pattern findings from whatever `malveon watch` captured while it ran — nothing to ask the agent, nothing to paste, for any of it.
 
 `malveon watch` is optional — hero-act still works without it, using the git-baseline signal alone (catches a bad pattern that's still present right now). Running it adds a second signal: catching a bad pattern (a real, named catalog — an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) that appeared and got fixed entirely within the session, which the git comparison alone can't see. No self-report involved either way.
 
@@ -70,10 +70,10 @@ All optional — leave any out and that section of the report shows itself skipp
 
 Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename or location required (it searches the whole project tree, skipping `node_modules`/`.git`/build output). Auto-detection tries two ways:
 
-1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension, wherever it actually lives (`docs/PLAN.md` works fine). Found this way → used automatically, announced, never asked about.
-2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`. This is a guess, not a deliberate name match, so even a single result gets shown and confirmed (`use it? [Y/n]`) before it's trusted — it doesn't get auto-picked the way a name match does.
+1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension, wherever it actually lives (`docs/PLAN.md` works fine).
+2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`.
 
-If nothing matches either way, or more than one file looks right, it asks — never guesses.
+Either way, it never assumes — even one clear match gets shown to you first: `found a possible plan file (by name): docs/PLAN.md — use it? [Y/n]`. Say no and it asks for the real path instead. More than one candidate, or none at all, and it asks the same way. The only way to skip being asked is `--features <path>`.
 
 **JSON** (`.json`):
 ```json
