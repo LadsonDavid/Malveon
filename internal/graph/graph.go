@@ -48,20 +48,115 @@ type Node struct {
 // Graph is just the flat set of nodes a run produced.
 type Graph struct {
 	Nodes []Node
+
+	commonWords map[string]bool // lazily computed, see commonWordSet
+}
+
+// commonWordMinCount and commonWordFraction jointly decide when a word
+// has stopped meaning anything in *this* codebase. Chosen from real data
+// (2026-09-16, a 292-node real project): "api" sat at 140 nodes (47.9%)
+// and "admin" at 19 (6.5%), both causing real false-positive matches
+// (a "Circles" feature matching an unrelated "announcements" route
+// because both happened to be under /admin/*); a genuinely specific
+// feature word like "circles" itself sat at 10 nodes (3.4%). The
+// min-count floor exists specifically so this never fires on a small
+// graph (a test fixture, a young project) where a legitimate shared
+// word between a real call/route pair can easily be 100% of a tiny
+// node count — the fraction alone can't tell "too common" apart from
+// "this pair is exactly what it looks like" without enough nodes to
+// make the statistic mean something.
+const (
+	commonWordMinCount = 15
+	commonWordFraction = 0.05
+)
+
+// stopWords are ordinary English function words that carry no domain
+// meaning at all — unlike commonWordFraction/commonWordMinCount (which
+// catch a word specific to *this* codebase becoming too common to mean
+// anything), these can coincidentally collide with a URL path fragment
+// regardless of how rare that collision is. Confirmed 2026-09-16: a
+// feature description starting "All 6 Settings tabs..." matched an
+// unrelated /api/notifications/read-all route — "all" appeared on only
+// one node in the whole graph, far too rare to trip the frequency
+// filter, but it's still not a real signal. A small, fixed, standard
+// stopword list — not per-codebase, never needs tuning — closes that
+// gap the frequency filter structurally can't.
+var stopWords = map[string]bool{
+	"a": true, "an": true, "the": true,
+	"and": true, "or": true, "of": true, "to": true, "in": true, "on": true,
+	"for": true, "with": true, "from": true, "by": true, "at": true,
+	"is": true, "are": true, "be": true, "as": true, "it": true,
+	"this": true, "that": true, "all": true, "any": true,
+	"your": true, "you": true, "we": true, "our": true,
+}
+
+// commonWordSet returns the words that carry no identifying signal in
+// this graph — either because they're generic English (stopWords) or
+// because they're specific to this codebase but appear in too many
+// nodes to mean anything (commonWordFraction/commonWordMinCount).
+// Computed once and cached — every check that resolves features against
+// this graph calls FindNodesMatching repeatedly, and the set doesn't
+// change mid-run.
+func (g *Graph) commonWordSet() map[string]bool {
+	if g.commonWords != nil {
+		return g.commonWords
+	}
+	counts := map[string]int{}
+	for _, n := range g.Nodes {
+		for _, w := range dedupe(normalizeWords(n.Words)) {
+			counts[w]++
+		}
+	}
+	floor := float64(len(g.Nodes)) * commonWordFraction
+	common := map[string]bool{}
+	for w := range stopWords {
+		common[w] = true
+	}
+	for w, c := range counts {
+		if c > commonWordMinCount && float64(c) > floor {
+			common[w] = true
+		}
+	}
+	g.commonWords = common
+	return common
+}
+
+func dedupe(words []string) []string {
+	seen := make(map[string]bool, len(words))
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if !seen[w] {
+			seen[w] = true
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // FindNodesMatching returns nodes of the given kind whose Words overlap
 // with any of the given feature words (case-insensitive, loose token
-// match — not an exact string match).
+// match — not an exact string match), excluding words too common across
+// the whole graph to mean anything (see commonWordSet).
 func (g *Graph) FindNodesMatching(kind Kind, featureWords []string) []Node {
-	wanted := normalizeWords(featureWords)
+	common := g.commonWordSet()
+	wanted := excludeCommon(normalizeWords(featureWords), common)
 	var out []Node
 	for _, n := range g.Nodes {
 		if n.Kind != kind {
 			continue
 		}
-		if wordsOverlap(normalizeWords(n.Words), wanted) {
+		if wordsOverlap(excludeCommon(normalizeWords(n.Words), common), wanted) {
 			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func excludeCommon(words []string, common map[string]bool) []string {
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if !common[w] {
+			out = append(out, w)
 		}
 	}
 	return out
