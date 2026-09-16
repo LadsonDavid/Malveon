@@ -5,12 +5,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-)
 
-var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	"dist": true, "build": true, ".malveon": true,
-}
+	"github.com/LadsonDavid/beta-test/internal/skipdirs"
+)
 
 var sourceExts = map[string]bool{
 	".js": true, ".jsx": true, ".ts": true, ".tsx": true, ".mjs": true, ".cjs": true,
@@ -36,7 +33,7 @@ func referencedElsewhere(root, funcName string) bool {
 			return nil
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			if skipdirs.Names[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

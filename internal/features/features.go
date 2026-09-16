@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/LadsonDavid/beta-test/internal/skipdirs"
 )
 
 type Feature struct {
@@ -54,18 +56,7 @@ var (
 	candidateExts        = map[string]bool{".json": true, ".md": true, ".markdown": true, ".txt": true}
 )
 
-// skipDirs mirrors the extractor/uioverlap/watch convention: noise and
-// build-output directories a plan file is never meaningfully found in,
-// but that recursion would otherwise waste time walking (or, worse,
-// falsely match a file inside). Confirmed 2026-09-16 against a real
-// project — .next added after a real run recursed harmlessly through it,
-// but there's no reason to.
-var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	"dist": true, "build": true, ".next": true, ".malveon": true,
-}
-
-// Detect recurses through root (deliberately skipping skipDirs, so it
+// Detect recurses through root (deliberately skipping skipdirs.Names, so it
 // never wanders into node_modules or a build output dir and calls
 // something a plan file by accident) for files that look like a plan:
 // name containing "plan"/"feature"/"checklist"/"todo" with a supported
@@ -87,7 +78,7 @@ func Detect(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && skipDirs[d.Name()] {
+			if path != root && skipdirs.Names[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -110,7 +101,7 @@ func Detect(root string) ([]string, error) {
 
 // DetectByContent is the fallback when Detect's name match finds nothing
 // — the plan could be named anything. Recurses the same way Detect does
-// (see skipDirs), scanning every .json/.md/.markdown file (not .txt — a
+// (see skipdirs.Names), scanning every .json/.md/.markdown file (not .txt — a
 // bare text file with no name hint has no reliable content signal
 // either; asking the user is the honest move there, not guessing from "a
 // file with some lines in it") and checking whether its *content*
@@ -134,7 +125,7 @@ func DetectByContent(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && skipDirs[d.Name()] {
+			if path != root && skipdirs.Names[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

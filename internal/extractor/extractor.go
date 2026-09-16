@@ -11,12 +11,8 @@ import (
 	"strings"
 
 	"github.com/LadsonDavid/beta-test/internal/graph"
+	"github.com/LadsonDavid/beta-test/internal/skipdirs"
 )
-
-var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	"dist": true, "build": true, ".malveon": true,
-}
 
 // Extract walks root and returns the code graph for every supported
 // source file found.
@@ -28,7 +24,7 @@ func Extract(root string) (*graph.Graph, error) {
 			return err
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			if skipdirs.Names[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

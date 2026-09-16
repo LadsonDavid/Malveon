@@ -1,6 +1,7 @@
 package extractor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/LadsonDavid/beta-test/internal/graph"
@@ -96,6 +97,38 @@ func TestWordsForExcludesReservedFilenames(t *testing.T) {
 		got := wordsFor(tc.file, tc.path)
 		if !equalSets(got, tc.want) {
 			t.Errorf("wordsFor(%q, %q) = %v, want %v", tc.file, tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestExtractSkipsBuildOutput covers a real bug a reviewer hit: .next
+// (Next.js's build output) was missing from the extractor's own skip
+// list even though it had been added to the plan-detector's copy —
+// Extract was walking into compiled, bundled JS chunks and citing them
+// as "evidence" instead of the real source that produced them.
+func TestExtractSkipsBuildOutput(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "src/app/api/jobs/route.ts", `
+export async function GET(request: Request) {
+  return new Response("ok");
+}
+`)
+	// A compiled chunk sitting inside .next that, if scanned, would look
+	// like a route registration of its own — Extract must never see it.
+	writeTestFile(t, dir, ".next/server/chunks/ssr/fake_bundle.js", `
+app.get("/totally-fake-bundled-route", handler);
+`)
+	writeTestFile(t, dir, "__pycache__/fake.py", `
+requests.get("/should-not-be-scanned")
+`)
+
+	g, err := Extract(dir)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	for _, n := range g.Nodes {
+		if strings.Contains(n.File, ".next") || strings.Contains(n.File, "__pycache__") {
+			t.Errorf("expected no nodes from build output/cache dirs, got one from %s", n.File)
 		}
 	}
 }

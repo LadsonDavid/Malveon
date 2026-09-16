@@ -42,6 +42,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/LadsonDavid/beta-test/internal/skipdirs"
 )
 
 type Finding struct {
@@ -49,10 +51,6 @@ type Finding struct {
 	Line    int
 	Classes string
 	Reason  string
-}
-
-var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true, "dist": true, "build": true, ".malveon": true,
 }
 
 var classAttrPattern = regexp.MustCompile(`(?:class|className)\s*=\s*"([^"]*)"`)
@@ -81,7 +79,7 @@ func Run(root string) ([]Finding, error) {
 			return err
 		}
 		if d.IsDir() {
-			if skipDirs[d.Name()] {
+			if skipdirs.Names[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil

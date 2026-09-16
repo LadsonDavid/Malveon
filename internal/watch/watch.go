@@ -26,15 +26,12 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/LadsonDavid/beta-test/internal/skipdirs"
 )
 
 const defaultHeartbeatInterval = 5 * time.Second
 const defaultDebounce = 2 * time.Second
-
-var skipDirs = map[string]bool{
-	".git": true, "node_modules": true, "vendor": true,
-	"dist": true, "build": true, ".malveon": true,
-}
 
 var watchedExts = map[string]bool{
 	".js": true, ".jsx": true, ".ts": true, ".tsx": true,
@@ -132,7 +129,7 @@ func Run(ctx context.Context, opts Options) error {
 			}
 			info, statErr := os.Stat(ev.Name)
 			if statErr == nil && info.IsDir() {
-				if ev.Op&fsnotify.Create != 0 && !skipDirs[filepath.Base(ev.Name)] {
+				if ev.Op&fsnotify.Create != 0 && !skipdirs.Names[filepath.Base(ev.Name)] {
 					_ = w.Add(ev.Name) // a new subdirectory appeared mid-session; watch it too
 				}
 				continue
@@ -191,7 +188,7 @@ func addRecursive(w *fsnotify.Watcher, root string) error {
 		if !d.IsDir() {
 			return nil
 		}
-		if d.Name() != filepath.Base(root) && skipDirs[d.Name()] {
+		if d.Name() != filepath.Base(root) && skipdirs.Names[d.Name()] {
 			return filepath.SkipDir
 		}
 		return w.Add(path)
