@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -46,6 +47,39 @@ func Load(path string) ([]Feature, error) {
 	default:
 		return withGeneratedIDs(parsePlainTextLines(string(raw))), nil
 	}
+}
+
+var (
+	candidateNamePattern = regexp.MustCompile(`(?i)(plan|feature|checklist|todo)`)
+	candidateExts        = map[string]bool{".json": true, ".md": true, ".markdown": true, ".txt": true}
+)
+
+// Detect looks in root (top-level only, not recursive — deliberately
+// narrow, so it never wanders into node_modules or similar and calls
+// something a plan file by accident) for files that look like a plan:
+// name containing "plan"/"feature"/"checklist"/"todo" with a supported
+// extension. Returns sorted candidate paths, never a guess about which
+// one is "the" plan — that decision is always left to the caller.
+func Detect(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("looking for a plan file in %s: %w", root, err)
+	}
+	var candidates []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !candidateExts[strings.ToLower(filepath.Ext(name))] {
+			continue
+		}
+		if candidateNamePattern.MatchString(name) {
+			candidates = append(candidates, filepath.Join(root, name))
+		}
+	}
+	sort.Strings(candidates)
+	return candidates, nil
 }
 
 func parseJSON(raw []byte) ([]Feature, error) {

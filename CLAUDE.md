@@ -51,6 +51,15 @@ A features/plan file in whatever format the user already has it in — no fixed 
 
 IDs are generated from the name (slugified, de-duplicated) for Markdown/text input, since those formats don't carry an explicit ID.
 
+**Finding the plan file (confirmed 2026-09-16 — the command shouldn't need memorizing):** `--features <path>` is optional, not required. When omitted, `features.Detect(root)` looks (top-level only, not recursive) for files whose name contains "plan"/"feature"/"checklist"/"todo" (case-insensitive) with a supported extension:
+
+- Exactly one candidate → used automatically, and the choice is printed (`using plan file: PLAN.md`) — never silent.
+- More than one candidate → the tool asks which one, interactively (numbered list, bare Enter picks the first).
+- No candidates → the tool asks for a path directly.
+- Not running in a real terminal (stdin isn't a TTY — scripts/CI) and the answer is ambiguous or missing → fails immediately with a clear error naming the candidates, rather than hanging waiting for input that will never come.
+
+Same rule as everywhere else in this tool: never guess, and when unsure, ask instead of picking silently. `--features` still works exactly as before and skips the whole detection/prompt step, which is what scripts and CI should use.
+
 ### 3.2 The seven checks
 
 The first six read the same in-memory code graph, built once per run. The seventh (3.2.8, frontend overlap risk) scans CSS/JSX directly rather than the route/call graph, since it's answering a different kind of question. No live server, no browser, no spinning up the tested app for any of them.
@@ -140,7 +149,7 @@ One report, sectioned by check type (wiring / contract / overlap / frontend-over
 - Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
 - (agent does its implementation work; ask it what bugs it fixed and save that to a plain-text file, one item per line)
-- `malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt` — runs all seven checks, prints the report. `--bugs-reported` and `--claimed-summary` are both optional; the hero-act and confidence sections report themselves skipped, with a plain reason, if their input isn't given.
+- `malveon check` — no flags required. Auto-detects the plan file (see 3.1), asks if ambiguous. `--features`/`--bugs-reported`/`--claimed-summary` all remain available for scripts/CI or to skip the prompt; the hero-act and confidence sections report themselves skipped, with a plain reason, if their optional input isn't given.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.
 
 ## 4. What's explicitly deferred (do not build yet)

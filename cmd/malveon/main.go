@@ -40,7 +40,9 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage:")
 	fmt.Fprintln(os.Stderr, "  malveon session start [--root <path>]")
-	fmt.Fprintln(os.Stderr, "  malveon check --features <path> [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
+	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
+	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
+	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
 }
 
 func runSession(args []string) {
@@ -69,9 +71,18 @@ func runCheck(args []string) {
 	fset.Parse(args)
 
 	if *featuresPath == "" {
-		fmt.Fprintln(os.Stderr, "error: --features is required")
-		usage()
-		os.Exit(2)
+		candidates, err := features.Detect(*root)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		resolved, err := resolveFeaturesPath(candidates, os.Stdin, os.Stderr, isInteractive())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			usage()
+			os.Exit(2)
+		}
+		*featuresPath = resolved
 	}
 
 	fs, err := features.Load(*featuresPath)

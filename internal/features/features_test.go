@@ -68,6 +68,47 @@ func TestLoadPlainText(t *testing.T) {
 	}
 }
 
+func TestDetect(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"PLAN.md", "features.json", "README.md", "notes.txt", "server.go"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	candidates, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+
+	want := map[string]bool{
+		filepath.Join(dir, "PLAN.md"):        true,
+		filepath.Join(dir, "features.json"):  true,
+	}
+	if len(candidates) != len(want) {
+		t.Fatalf("got %d candidates, want %d: %v", len(candidates), len(want), candidates)
+	}
+	for _, c := range candidates {
+		if !want[c] {
+			t.Errorf("unexpected candidate: %s (README.md, notes.txt, server.go should never match)", c)
+		}
+	}
+}
+
+func TestDetectNoMatches(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "server.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("expected no candidates, got %v", candidates)
+	}
+}
+
 func TestLoadDuplicateNamesGetDistinctIDs(t *testing.T) {
 	p := writeTemp(t, "plan.txt", "Refund Button\nrefund button\n")
 	fs, err := Load(p)

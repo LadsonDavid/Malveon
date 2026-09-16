@@ -31,17 +31,27 @@ Download the binary for your OS from the [Releases](../../releases) page. No oth
 malveon session start
 
 # ... agent does its work ...
-# ask it: "what bugs did you introduce and fix this session?" -> save to bugs.txt
-# ask it: "summarize what you built and whether it works" -> save to summary.txt
 
+malveon check
+```
+
+That's it — `malveon check` with no flags looks for a plan file in the current folder automatically. If it finds exactly one, it uses it and says so. If it finds more than one, it asks which — never guesses. If it finds none, it asks you for the path. Nothing is assumed silently.
+
+Want to skip the question entirely (scripts, CI, or just being explicit), or add the optional inputs?
+
+```bash
 malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt
 ```
 
-`--bugs-reported` and `--claimed-summary` are both optional — leave either out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
+- `--features <path>` — skips the auto-detect/prompt, use this exact file.
+- `--bugs-reported <path>` — ask the agent "what bugs did you introduce and fix this session?", save the answer here, for the hero-act check.
+- `--claimed-summary <path>` — ask the agent to summarize what it built and whether it works, save that here, for the confidence check.
+
+Both are optional — leave either out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
 
 ## The plan file
 
-Whatever format you already keep your plan in — no fixed shape forced on you. Pick by extension:
+Whatever format you already keep your plan in — no fixed shape forced on you. Auto-detected by filename (anything containing "plan," "feature," "checklist," or "todo") and extension:
 
 **JSON** (`.json`):
 ```json
