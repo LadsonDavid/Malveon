@@ -37,6 +37,11 @@ func Extract(root string) (*graph.Graph, error) {
 		var sites []callSite
 		ext := strings.ToLower(filepath.Ext(path))
 
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = path
+		}
+
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return nil // unreadable file: skip, don't fail the whole run
@@ -46,6 +51,9 @@ func Extract(root string) (*graph.Graph, error) {
 		switch ext {
 		case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
 			sites = scanJSLike(src)
+			if isNextRouteFile(rel) {
+				sites = append(sites, scanNextRouteHandlers(rel, src)...)
+			}
 		case ".py":
 			sites = scanPython(src)
 		case ".go":
@@ -58,10 +66,6 @@ func Extract(root string) (*graph.Graph, error) {
 			return nil
 		}
 
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = path
-		}
 		for _, s := range sites {
 			g.Nodes = append(g.Nodes, toNode(rel, s))
 		}

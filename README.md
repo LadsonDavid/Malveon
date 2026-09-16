@@ -109,6 +109,6 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
 - Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
 - Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
-- v1 language coverage: Python, TypeScript, JavaScript, Go.
+- v1 language coverage: Python, TypeScript, JavaScript, Go. Recognizes both Express-style route registrations and Next.js App Router route handlers (`route.ts` files); the older Pages Router (`pages/api/*.ts`) isn't covered yet.
 
 See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.
