@@ -107,12 +107,14 @@ Needs a session-start git reference (see 3.2.5) and a plain-text self-report fro
 
 **Stated limitation:** file-level, not line-level. If a file was touched at all this session, any reported bug pointing at that file reads as self-introduced — even on the (presumably rare) chance the specific line predates the session. Precise line-range diff parsing is real future work, not built in v1.
 
+**Considered and rejected (2026-09-16): sourcing the bugs-reported list automatically from commit messages, the way 3.2.7's confidence check now sources its claims.** Rejected because it's circular here specifically: it would mean trusting the commit message's own claim of being a "fix" to decide whether something is a bug — the exact self-report this check exists to not trust, just relocated from chat into git. (Confidence-check's automatic sourcing is legitimately different — see 3.2.7's own note on why.) Real automatic alternatives were scoped and are real future work, not this week: a continuous background snapshot mechanism (independent of any commit, so nothing needs to be labeled as anything) paired with either a named catalog of known bug-introduction patterns, or — the fully rigorous version — running the project's own test suite at each snapshot and watching for fail→pass transitions as the one genuinely objective, zero-self-report signal. That last piece needs live execution, which is why it's deferred alongside the rest of section 4's live-execution items, not built quietly around the edge of the static-only rule.
+
 #### 3.2.5 Session lifecycle (supports 3.2.4)
 
 Two commands, automatic capture — the tester never manually looks up a commit hash:
 
 - `malveon session start` — run once, right before the agent's task begins. Captures the current git ref into local state (e.g. `.malveon/session.json`).
-- `malveon check --features features.json --bugs-reported <path>` — runs all four checks. Not-in-plan and hero-act each report themselves `SKIPPED`/unavailable, with a plain reason, if no session was started or (for hero-act specifically) no `--bugs-reported` file was given — never silently omitted, never run against a guessed baseline.
+- `malveon check` — runs every check. Not-in-plan, hero-act, and confidence each need a session to have been started; hero-act additionally needs `--bugs-reported <path>` (still manual — see 3.2.4's note on why automating this one isn't as simple as confidence's commit-message sourcing). Any that can't run report themselves `SKIPPED`/unavailable with a plain reason — never silently omitted, never run against a guessed baseline.
 
 #### 3.2.6 Overlap — two or more route registrations claiming the same method+path
 
@@ -127,12 +129,16 @@ No session required — this is a property of the current codebase, not somethin
 
 #### 3.2.7 Confidence check — does the agent's own claim match what was actually verified
 
-Takes a plain-text file of the agent's own summary (`--claimed-summary`) — whatever it said about what it built — and cross-references it against the wiring check's already-computed, evidence-based verdict for each feature the plan mentions. Same discipline as hero-act: the agent's language is never the proof, only ever a claim to check.
+Cross-references whatever the agent claimed about a feature against the wiring check's already-computed, evidence-based verdict for that same feature. Same discipline as hero-act: the agent's language is never the proof, only ever a claim to check.
+
+**Claim source is automatic by default (confirmed 2026-09-16 — no manual "ask the agent and paste it" step required):** reads commit messages since session start via `gitutil.CommitMessagesSince`, the same "read what already exists, ask for nothing new" approach as `ChangedFilesSince`. Requires a session to have been started; if not, or if there are no commits yet, the check either reports itself unavailable (no session) or reports a clean, honest empty result (session exists, nothing committed yet — not an error). `--claimed-summary <path>` remains available as an explicit override for anyone whose commit messages are too terse to carry a real claim, or who wants to feed it something else.
+
+**Why this is legitimately different from hero-act's rejected commit-message idea (see 3.2.4's history):** hero-act's commit-message approach was circular — it used the commit message's own self-description ("this is a fix") as *evidence for an objective fact*, which the agent could simply evade by not labeling something a fix. This check doesn't need the commit message to be honestly self-labeled as anything: it only captures whatever confident language the agent actually wrote, if any, then checks that claim against a verdict computed entirely independently (the wiring check). An agent that writes modest, non-confident commit messages doesn't evade anything — it just produces more `NOT TESTED` (no claim found) results, the same honest fallback this check has always had.
 
 - A line mentioning a feature's words alongside a confidence phrase ("works," "done," "fully functional," "ready," etc.) counts as a claim for that feature.
 - Claimed, and wiring says PASS → **CONFIRMED**.
 - Claimed, and wiring says FAIL or NOT TESTED → **CONFIDENCE MISMATCH**, quoting the claim line and the real verdict.
-- Feature never mentioned in the summary → **NOT TESTED** (no claim to check) — same as everywhere else, absence of evidence isn't treated as a result.
+- Feature never mentioned anywhere in the claim text → **NOT TESTED** (no claim to check) — same as everywhere else, absence of evidence isn't treated as a result.
 
 This intentionally does **not** parse confidence language as a standalone signal (it's never used as evidence on its own) — it exists purely to catch the gap between what the agent *said* and what was actually *verified* elsewhere in the report.
 
@@ -153,8 +159,8 @@ One report, sectioned by check type (wiring / contract / overlap / frontend-over
 - Clone the repo.
 - Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
-- (agent does its implementation work; ask it what bugs it fixed and save that to a plain-text file, one item per line)
-- `malveon check` — no flags required. Auto-detects the plan file (see 3.1), asks if ambiguous. `--features`/`--bugs-reported`/`--claimed-summary` all remain available for scripts/CI or to skip the prompt; the hero-act and confidence sections report themselves skipped, with a plain reason, if their optional input isn't given.
+- Agent does its implementation work, committing along the way like normal. (Only extra manual step left: ask it what bugs it fixed and save that to a plain-text file for `--bugs-reported`, if you want the hero-act section to run — confidence no longer needs this, it reads commit messages automatically.)
+- `malveon check` — no flags required. Auto-detects the plan file (see 3.1) and reads confidence claims from commit messages automatically (see 3.2.7). `--features`/`--bugs-reported`/`--claimed-summary` all remain available to skip the automatic behavior or for scripts/CI.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.
 
 ## 4. What's explicitly deferred (do not build yet)
@@ -163,6 +169,7 @@ One report, sectioned by check type (wiring / contract / overlap / frontend-over
 - Exit code that blocks a git commit on FAIL.
 - Plain-CSS-file cascade resolution for frontend overlap risk (3.2.8 currently covers Tailwind utility classes only).
 - Live-rendered visual overlap confirmation (an optional, clearly-separate mode that would actually check real geometry) — explicitly not folded into the static checks above; see the founder discussion in `session-context-full.md` section 7 for why this stays a separate, later decision rather than a quiet addition to v1.
+- Fully automatic hero-act detection with zero session/commit dependency: a continuous background snapshot mechanism (captures code state independent of what gets committed, so nothing needs to be labeled as a "fix" by anyone) plus either a named bad-pattern catalog or, for the fully rigorous version, running the project's own test suite at each snapshot and watching for fail→pass transitions — see 3.2.4's note on why the commit-message shortcut was rejected instead of built.
 
 These are real, grounded in specific pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all seven checks in section 3) proves itself with a real person, not before. (Backend overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
 

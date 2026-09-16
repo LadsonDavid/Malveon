@@ -49,6 +49,26 @@ func ChangedFilesSince(root, baseRef string) (map[string]bool, error) {
 	return changed, nil
 }
 
+// CommitMessagesSince returns every commit's full message (subject +
+// body) made since baseRef, oldest first, one string per commit. This is
+// what lets the confidence check read what the agent actually claimed
+// without anyone having to manually ask it and paste the answer — it's
+// only reading what already exists, not asking for anything new.
+func CommitMessagesSince(root, baseRef string) ([]string, error) {
+	out, err := run(root, "log", "--reverse", "--format=%B%x00", baseRef+"..HEAD")
+	if err != nil {
+		return nil, fmt.Errorf("reading commit messages since %s: %w", baseRef, err)
+	}
+	var messages []string
+	for _, m := range strings.Split(out, "\x00") {
+		m = strings.TrimSpace(m)
+		if m != "" {
+			messages = append(messages, m)
+		}
+	}
+	return messages, nil
+}
+
 func splitLines(s string) []string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {

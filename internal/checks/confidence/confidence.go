@@ -1,9 +1,16 @@
-// Package confidence implements the "fake AI confidence" check: the
-// agent's own plain-text summary claims certain features are done/working,
-// and this cross-references that claim against the wiring check's already
-// -computed, evidence-based verdict for the same feature. Same discipline
-// as hero-act: the agent's word is never the proof, only ever a claim to
-// be checked against something real.
+// Package confidence implements the "fake AI confidence" check: does the
+// agent's own claim that a feature is done/working actually match the
+// wiring check's already-computed, evidence-based verdict for the same
+// feature. Same discipline as hero-act: the agent's word is never the
+// proof, only ever a claim to be checked against something real.
+//
+// The claim source is automatic by default — commit messages since
+// session start, read the same way ChangedFilesSince reads file history.
+// No one has to remember to ask the agent a question and paste the
+// answer; the tool only reads what already exists. --claimed-summary
+// stays available as an explicit override for anyone who wants to feed
+// it something else (or whose commit messages are too terse to carry
+// any real claim).
 package confidence
 
 import (
@@ -13,6 +20,8 @@ import (
 
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 	"github.com/LadsonDavid/beta-test/internal/features"
+	"github.com/LadsonDavid/beta-test/internal/gitutil"
+	"github.com/LadsonDavid/beta-test/internal/session"
 )
 
 type Verdict string
@@ -42,18 +51,21 @@ var confidencePhrases = []string{
 	"fully functional", "perfectly", "ready", "finished", "good to go",
 }
 
-// Run reads summaryPath — the agent's own plain-text claim about what it
-// built — and checks each feature the plan mentions against the wiring
-// check's verdict for that same feature.
-func Run(fs []features.Feature, wiringResults []wiring.Result, summaryPath string) Report {
-	if summaryPath == "" {
-		return Report{Available: false, Reason: "no --claimed-summary file given"}
-	}
-	raw, err := os.ReadFile(summaryPath)
+// Run checks each feature the plan mentions against the wiring check's
+// verdict for that same feature, using whatever claim text it can find.
+// summaryPath, if given, is used as-is (explicit override, no session
+// needed). If empty, the claim text is read automatically from commit
+// messages since session start — this requires a session to have been
+// started, same as the other session-scoped checks.
+func Run(fs []features.Feature, wiringResults []wiring.Result, root, summaryPath string) Report {
+	raw, err := claimText(root, summaryPath)
 	if err != nil {
-		return Report{Available: false, Reason: fmt.Sprintf("couldn't read claimed-summary file: %v", err)}
+		return Report{Available: false, Reason: err.Error()}
 	}
-	lines := strings.Split(string(raw), "\n")
+	if raw == "" {
+		return Report{Available: true} // nothing claimed anywhere — a valid, honest "nothing to report"
+	}
+	lines := strings.Split(raw, "\n")
 
 	wiringByID := make(map[string]wiring.Result, len(wiringResults))
 	for _, r := range wiringResults {
@@ -67,7 +79,7 @@ func Run(fs []features.Feature, wiringResults []wiring.Result, summaryPath strin
 			results = append(results, Result{
 				FeatureID: f.ID, FeatureName: f.Name,
 				Verdict: NotClaimed,
-				Reason:  "the summary doesn't claim anything about this feature — nothing to cross-check",
+				Reason:  "no claim found about this feature — nothing to cross-check",
 			})
 			continue
 		}
@@ -89,11 +101,34 @@ func Run(fs []features.Feature, wiringResults []wiring.Result, summaryPath strin
 		results = append(results, Result{
 			FeatureID: f.ID, FeatureName: f.Name, Verdict: Mismatch,
 			ClaimLine: claimLine,
-			Reason:    fmt.Sprintf("summary claims this works, but the wiring check says %s: %s", wr.Verdict, wr.Reason),
+			Reason:    fmt.Sprintf("claimed this works, but the wiring check says %s: %s", wr.Verdict, wr.Reason),
 		})
 	}
 
 	return Report{Available: true, Results: results}
+}
+
+// claimText resolves the raw text to scan for claims: the explicit
+// --claimed-summary file if given, otherwise commit messages since
+// session start.
+func claimText(root, summaryPath string) (string, error) {
+	if summaryPath != "" {
+		raw, err := os.ReadFile(summaryPath)
+		if err != nil {
+			return "", fmt.Errorf("couldn't read claimed-summary file: %w", err)
+		}
+		return string(raw), nil
+	}
+
+	st, ok := session.Load(root)
+	if !ok {
+		return "", fmt.Errorf("no --claimed-summary given, and no session start recorded to read commit messages from — run `malveon session start` before the agent begins its task, or pass --claimed-summary explicitly")
+	}
+	messages, err := gitutil.CommitMessagesSince(root, st.StartRef)
+	if err != nil {
+		return "", fmt.Errorf("couldn't read commit messages: %w", err)
+	}
+	return strings.Join(messages, "\n"), nil
 }
 
 func findClaim(lines []string, featureWords []string) (string, bool) {

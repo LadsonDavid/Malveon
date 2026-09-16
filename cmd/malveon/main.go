@@ -43,6 +43,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
+	fmt.Fprintln(os.Stderr, "    --claimed-summary can be omitted too: the confidence check reads commit")
+	fmt.Fprintln(os.Stderr, "    messages since session start automatically. Pass it to use something else instead.")
 }
 
 func runSession(args []string) {
@@ -67,7 +69,7 @@ func runCheck(args []string) {
 	featuresPath := fset.String("features", "", "path to the features file: .json, .md (checklist), or plain text (required)")
 	root := fset.String("root", ".", "repo root to scan")
 	bugsReported := fset.String("bugs-reported", "", "path to a plain-text file of self-reported bugs (for the hero-act check)")
-	claimedSummary := fset.String("claimed-summary", "", "path to a plain-text file of the agent's own claims about what it built (for the confidence check)")
+	claimedSummary := fset.String("claimed-summary", "", "optional: path to a plain-text file of the agent's own claims (overrides the automatic commit-message scan for the confidence check)")
 	fset.Parse(args)
 
 	if *featuresPath == "" {
@@ -128,5 +130,5 @@ func runCheck(args []string) {
 		report.WriteHeroAct(os.Stdout, heroact.Result{Available: false, Reason: "no --bugs-reported file given"})
 	}
 
-	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *claimedSummary))
+	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *root, *claimedSummary))
 }

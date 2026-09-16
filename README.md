@@ -30,24 +30,24 @@ Download the binary for your OS from the [Releases](../../releases) page. No oth
 # once, right before you hand the agent a task
 malveon session start
 
-# ... agent does its work ...
+# ... agent does its work, committing along the way like normal ...
 
 malveon check
 ```
 
-That's it — `malveon check` with no flags looks for a plan file in the current folder automatically. If it finds exactly one, it uses it and says so. If it finds more than one, it asks which — never guesses. If it finds none, it asks you for the path. Nothing is assumed silently.
+That's it. `malveon check` with no flags: looks for a plan file in the current folder automatically (asks if it's ambiguous, never guesses), and reads the agent's confidence claims straight from its commit messages — no need to ask it anything or paste any file. If it says "refund flow is fully working" in a commit message, that's what gets checked against reality.
 
-Want to skip the question entirely (scripts, CI, or just being explicit), or add the optional inputs?
+Want the one thing that's still manual (hero-act needs an explicit bug list — see why below), or to override the automatic behavior?
 
 ```bash
 malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt
 ```
 
-- `--features <path>` — skips the auto-detect/prompt, use this exact file.
-- `--bugs-reported <path>` — ask the agent "what bugs did you introduce and fix this session?", save the answer here, for the hero-act check.
-- `--claimed-summary <path>` — ask the agent to summarize what it built and whether it works, save that here, for the confidence check.
+- `--features <path>` — skips the plan auto-detect/prompt, use this exact file.
+- `--bugs-reported <path>` — ask the agent "what bugs did you introduce and fix this session?", save the answer here, for the hero-act check. This one's still manual on purpose: sourcing it from commit messages the same way confidence does would mean trusting the commit message's own claim of being a "fix" — the exact kind of unverified self-report this whole tool exists to not trust, just moved from chat into git.
+- `--claimed-summary <path>` — override the automatic commit-message reading with something else, for the confidence check.
 
-Both are optional — leave either out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
+All optional — leave any out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
 
 ## The plan file
 
