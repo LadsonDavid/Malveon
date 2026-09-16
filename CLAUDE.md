@@ -28,23 +28,32 @@ This is the single most important rule in this codebase, more important than any
 
 ## 3. v1 scope — build this, nothing else yet
 
-Expanded once, deliberately, in a 2026-09-11 planning session — not silent scope creep. Original v1 was one check only (wiring); after working through the reasoning with the founder, three more checks were pulled forward from "deferred" into v1 because each one directly answers a specific, named Reddit pain point and none of them requires live execution to implement honestly. What's still deferred (section 4) stays deferred for the same reason it always was: real ideas, but unproven until v1 holds up against a real stranger's repo.
+Expanded twice, deliberately, in 2026-09-11 and 2026-09-16 planning sessions — not silent scope creep. Original v1 was one check only (wiring); after working through the reasoning with the founder, five more checks were pulled forward from "deferred"/"not yet scoped" into v1 because each one directly answers a specific, named pain point (either from the original Reddit thread or from the founder's own follow-up review of what was still missing) and none of them requires live execution to implement honestly. What's still deferred (section 4) stays deferred for the same reason it always was: real ideas, but unproven until v1 holds up against a real stranger's repo.
 
 ### 3.1 Input
 
-A features file, e.g. `features.json`:
+A features/plan file in whatever format the user already has it in — no fixed universal format forced on them. Three formats are supported, dispatched by file extension (see `internal/features`):
 
+**JSON** (`.json`) — the original fixed shape:
 ```json
 [
   { "id": "refund-button", "name": "refund button" }
 ]
 ```
 
-Whatever plan or checklist a user already has, converted into this simple shape — no fixed universal format forced on them.
+**Markdown checklist** (`.md`/`.markdown`) — `- [ ] item`, `- [x] item`, `- item`, `* item`, or `1. item` lines; everything else (headings, prose) is skipped, not guessed at:
+```markdown
+- [ ] Refund button
+- [x] Cancel order
+```
 
-### 3.2 The four checks
+**Plain text** (`.txt`, or any other/no extension) — one feature name per non-empty, non-`#`-comment line.
 
-All four read the same in-memory code graph, built once per run. No live server, no browser, no spinning up the tested app for any of them.
+IDs are generated from the name (slugified, de-duplicated) for Markdown/text input, since those formats don't carry an explicit ID.
+
+### 3.2 The six checks
+
+All six read the same in-memory code graph, built once per run. No live server, no browser, no spinning up the tested app for any of them.
 
 #### 3.2.1 Wiring check — does a frontend action actually reach a real backend
 
@@ -91,9 +100,31 @@ Two commands, automatic capture — the tester never manually looks up a commit 
 - `malveon session start` — run once, right before the agent's task begins. Captures the current git ref into local state (e.g. `.malveon/session.json`).
 - `malveon check --features features.json --bugs-reported <path>` — runs all four checks. Not-in-plan and hero-act each report themselves `SKIPPED`/unavailable, with a plain reason, if no session was started or (for hero-act specifically) no `--bugs-reported` file was given — never silently omitted, never run against a guessed baseline.
 
+#### 3.2.6 Overlap — two or more route registrations claiming the same method+path
+
+Not Fowler's "Duplicated Code" smell (two chunks of logic computing the same thing) — this is route *collision*: two different registrations both claiming the same URL space, where only one will ever actually run and which one depends on framework/registration-order internals this tool has no visibility into. Scoped narrow to avoid false positives (routed through `refactoring`'s smell-scoping guidance, 2026-09-16):
+
+- Only `Extracted` (literal) paths are compared against each other — a dynamic path is never guessed into a collision.
+- Only routes with a *known* method are compared — same path, different method (`GET /refund` vs. `POST /refund`) is two legitimate routes, not a conflict.
+- Path comparison reuses `graph.PathsMatch` (the same wildcard-aware equality wiring/contract already use) — so a literal route and a parameterized one claiming overlapping space (`/profile/123` vs. `/profile/:id`) correctly counts as a collision, not just byte-identical paths.
+- **Stated limitation:** no reachability analysis. A route registered inside code that's never actually called still counts as a registration here.
+
+No session required — this is a property of the current codebase, not something scoped to "this session's changes."
+
+#### 3.2.7 Confidence check — does the agent's own claim match what was actually verified
+
+Takes a plain-text file of the agent's own summary (`--claimed-summary`) — whatever it said about what it built — and cross-references it against the wiring check's already-computed, evidence-based verdict for each feature the plan mentions. Same discipline as hero-act: the agent's language is never the proof, only ever a claim to check.
+
+- A line mentioning a feature's words alongside a confidence phrase ("works," "done," "fully functional," "ready," etc.) counts as a claim for that feature.
+- Claimed, and wiring says PASS → **CONFIRMED**.
+- Claimed, and wiring says FAIL or NOT TESTED → **CONFIDENCE MISMATCH**, quoting the claim line and the real verdict.
+- Feature never mentioned in the summary → **NOT TESTED** (no claim to check) — same as everywhere else, absence of evidence isn't treated as a result.
+
+This intentionally does **not** parse confidence language as a standalone signal (it's never used as evidence on its own) — it exists purely to catch the gap between what the agent *said* and what was actually *verified* elsewhere in the report.
+
 ### 3.3 Output
 
-One report, sectioned by check type (wiring / contract / not-in-plan / hero-act). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
+One report, sectioned by check type (wiring / contract / overlap / not-in-plan / hero-act / confidence). Within each section: one row per feature or finding — the name, the result, the specific reason, and the file/line evidence where relevant. No fixed report format imposed beyond that — keep it plain and readable in a terminal.
 
 ### 3.4 Install / usage (what gets sent to the tester)
 
@@ -101,16 +132,15 @@ One report, sectioned by check type (wiring / contract / not-in-plan / hero-act)
 - Download/install the `malveon` Go binary (single binary — no external tool prerequisite; the extractor is built in, not shelled out). Cross-compiles clean for linux/amd64, darwin/arm64, and windows/amd64 with no cgo, verified 2026-09-11.
 - `malveon session start` — captures the current git state before the agent's task begins.
 - (agent does its implementation work; ask it what bugs it fixed and save that to a plain-text file, one item per line)
-- `malveon check --features features.json --bugs-reported bugs.txt` — runs all four checks, prints the report.
+- `malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt` — runs all six checks, prints the report. `--bugs-reported` and `--claimed-summary` are both optional; the hero-act and confidence sections report themselves skipped, with a plain reason, if their input isn't given.
 - A small example repo + expected output, so the tester knows what a working run looks like before pointing it at their own real one. `testdata/fixture` in this repo doubles as that example today.
 
 ## 4. What's explicitly deferred (do not build yet)
 
-- Overlap / duplicate-code detection.
 - Recurring-failure memory across sessions (a local history file flagging when the same category of failure shows up again).
 - Exit code that blocks a git commit on FAIL.
 
-All three are real, grounded in specific Reddit commenters' pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all four checks in section 3) proves itself with a real person, not before.
+Both are real, grounded in specific Reddit commenters' pain points (see `session-context-full.md` section 7 for the full mapping) — they come after v1 (all six checks in section 3) proves itself with a real person, not before. (Overlap detection was originally on this list too — pulled forward into v1 on 2026-09-16, see 3.2.6.)
 
 ## 5. Tech choices
 

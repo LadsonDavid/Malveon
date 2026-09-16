@@ -8,8 +8,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
+	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 )
@@ -112,4 +114,49 @@ func WriteHeroAct(w io.Writer, res heroact.Result) {
 		}
 	}
 	fmt.Fprintf(w, "%d SELF-INTRODUCED, %d PRE-EXISTING, %d NOT RESOLVED\n\n", selfIntro, preExisting, notResolved)
+}
+
+func WriteOverlap(w io.Writer, findings []overlap.Finding) {
+	fmt.Fprintln(w, "OVERLAP CHECK — two or more route registrations claiming the same method+path")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+	if len(findings) == 0 {
+		fmt.Fprintln(w, "nothing flagged — no colliding route registrations found")
+		fmt.Fprintln(w)
+		return
+	}
+	for _, f := range findings {
+		fmt.Fprintf(w, "[OVERLAP] %s %s — registered %d times\n", f.Method, f.Path, len(f.Nodes))
+		for _, n := range f.Nodes {
+			fmt.Fprintf(w, "  evidence: %s:%d\n", n.File, n.Line)
+		}
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintf(w, "%d OVERLAP\n\n", len(findings))
+}
+
+func WriteConfidence(w io.Writer, report confidence.Report) {
+	fmt.Fprintln(w, "CONFIDENCE CHECK — does the agent's own claim match what was actually verified")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+	if !report.Available {
+		fmt.Fprintf(w, "SKIPPED: %s\n\n", report.Reason)
+		return
+	}
+	confirmed, mismatch, notClaimed := 0, 0, 0
+	for _, r := range report.Results {
+		fmt.Fprintf(w, "[%s] %s (%s)\n", r.Verdict, r.FeatureName, r.FeatureID)
+		if r.ClaimLine != "" {
+			fmt.Fprintf(w, "  claimed: %s\n", r.ClaimLine)
+		}
+		fmt.Fprintf(w, "  reason: %s\n", r.Reason)
+		fmt.Fprintln(w)
+		switch r.Verdict {
+		case confidence.Confirmed:
+			confirmed++
+		case confidence.Mismatch:
+			mismatch++
+		case confidence.NotClaimed:
+			notClaimed++
+		}
+	}
+	fmt.Fprintf(w, "%d CONFIRMED, %d CONFIDENCE MISMATCH, %d NOT TESTED\n\n", confirmed, mismatch, notClaimed)
 }

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heroact"
+	"github.com/LadsonDavid/beta-test/internal/checks/overlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/planauthority"
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 	"github.com/LadsonDavid/beta-test/internal/extractor"
@@ -37,7 +39,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage:")
 	fmt.Fprintln(os.Stderr, "  malveon session start [--root <path>]")
-	fmt.Fprintln(os.Stderr, "  malveon check --features <path> [--root <path>] [--bugs-reported <path>]")
+	fmt.Fprintln(os.Stderr, "  malveon check --features <path> [--root <path>] [--bugs-reported <path>] [--claimed-summary <path>]")
 }
 
 func runSession(args []string) {
@@ -59,9 +61,10 @@ func runSession(args []string) {
 
 func runCheck(args []string) {
 	fset := flag.NewFlagSet("check", flag.ExitOnError)
-	featuresPath := fset.String("features", "", "path to the features file (required)")
+	featuresPath := fset.String("features", "", "path to the features file: .json, .md (checklist), or plain text (required)")
 	root := fset.String("root", ".", "repo root to scan")
 	bugsReported := fset.String("bugs-reported", "", "path to a plain-text file of self-reported bugs (for the hero-act check)")
+	claimedSummary := fset.String("claimed-summary", "", "path to a plain-text file of the agent's own claims about what it built (for the confidence check)")
 	fset.Parse(args)
 
 	if *featuresPath == "" {
@@ -82,20 +85,18 @@ func runCheck(args []string) {
 		os.Exit(1)
 	}
 
-	report.WriteWiring(os.Stdout, wiring.Run(g, fs))
+	wiringResults := wiring.Run(g, fs)
+
+	report.WriteWiring(os.Stdout, wiringResults)
 	report.WriteContract(os.Stdout, contract.Run(g, fs))
+	report.WriteOverlap(os.Stdout, overlap.Run(g))
 	report.WritePlanAuthority(os.Stdout, planauthority.Run(g, fs, *root))
 
 	if *bugsReported != "" {
 		report.WriteHeroAct(os.Stdout, heroact.Run(*root, *bugsReported))
 	} else {
-		report.WriteHeroAct(os.Stdout, heroactSkipped())
+		report.WriteHeroAct(os.Stdout, heroact.Result{Available: false, Reason: "no --bugs-reported file given"})
 	}
-}
 
-func heroactSkipped() heroact.Result {
-	return heroact.Result{
-		Available: false,
-		Reason:    "no --bugs-reported file given",
-	}
+	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *claimedSummary))
 }

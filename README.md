@@ -6,16 +6,18 @@ Static analysis only. No live server, no browser, nothing runs. If it can't prov
 
 ## The problem this solves
 
-AI coding agents say "done" confidently, whether or not it's true. A button gets built with no backend behind it. A backend gets built with nothing calling it. The agent audits its own work in the same session it just wrote — and usually gives itself a passing grade, even when it shouldn't.
+AI coding agents say "done" confidently, whether or not it's true. A button gets built with no backend behind it. A backend gets built with nothing calling it. Two handlers silently claim the same route. The agent audits its own work in the same session it just wrote — and usually gives itself a passing grade, even when it shouldn't.
 
-`malveon check` reads the actual code and git history and reports four things:
+`malveon check` reads the actual code and git history and reports six things:
 
 - **Wiring** — does a frontend action you planned actually reach a real backend route?
 - **Contract** — does the call agree with the route on HTTP method (shape-level, not a claim the logic is correct)?
+- **Overlap** — do two or more route registrations silently claim the same method+path?
 - **Not-in-plan** — did the agent build something this session that your plan never asked for?
 - **Hero-act** — is that "bug I fixed" a real pre-existing bug, or one the agent created and fixed in the same breath?
+- **Confidence** — does the agent's own "it works" claim actually match what got verified?
 
-Every result is `PASS` / `FAIL` / or `NOT TESTED` — never a guess dressed up as an answer.
+Every result is `PASS` / `FAIL` / or `NOT TESTED` (or the check-specific equivalent) — never a guess dressed up as an answer.
 
 ## Install
 
@@ -28,18 +30,32 @@ Download the binary for your OS from the [Releases](../../releases) page. No oth
 malveon session start
 
 # ... agent does its work ...
-# ask it: "what bugs did you introduce and fix this session?" -> save the answer to bugs.txt
+# ask it: "what bugs did you introduce and fix this session?" -> save to bugs.txt
+# ask it: "summarize what you built and whether it works" -> save to summary.txt
 
-malveon check --features features.json --bugs-reported bugs.txt
+malveon check --features features.json --bugs-reported bugs.txt --claimed-summary summary.txt
 ```
 
-`features.json` is whatever plan you already have, in this shape:
+`--bugs-reported` and `--claimed-summary` are both optional — leave either out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
 
+## The plan file
+
+Whatever format you already keep your plan in — no fixed shape forced on you. Pick by extension:
+
+**JSON** (`.json`):
 ```json
 [
   { "id": "refund-button", "name": "refund button" }
 ]
 ```
+
+**Markdown checklist** (`.md`):
+```markdown
+- [ ] Refund button
+- [x] Cancel order
+```
+
+**Plain text** (`.txt`, or anything else): one feature name per line.
 
 ## Example
 
@@ -54,6 +70,7 @@ malveon check --root testdata/fixture --features testdata/fixture/features.json
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
 - Doesn't run anything live — dynamic URLs, wrapped API clients, and templated paths report `NOT TESTED`, never a guessed pass.
 - Hero-act is file-level, not line-level — if a file was touched at all this session, a reported bug pointing at it reads as self-introduced.
+- Overlap doesn't check reachability — a route registered in dead code still counts as a registration.
 - v1 language coverage: Python, TypeScript, JavaScript, Go.
 
 See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.
