@@ -10,10 +10,10 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 
 `malveon check` reads the actual code and git history and reports nine things:
 
-- **Wiring** — does a frontend action you planned actually reach a real backend route?
-- **Contract** — does the call agree with the route on HTTP method (shape-level, not a claim the logic is correct)?
-- **Overlap** — do two or more route registrations silently claim the same method+path?
-- **Frontend overlap risk** — is a Tailwind `absolute`/`fixed` element sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)?
+- **Wiring** — does a frontend action you planned actually reach a real backend route? A miss says exactly which side is missing — backend built with no frontend, frontend built with no backend, or neither found.
+- **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
+- **Overlap** — do two or more route registrations silently claim the same method+path? Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
+- **Frontend overlap risk** — is an `absolute`/`fixed` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)?
 - **Not-in-plan** — did the agent build something this session that your plan never asked for?
 - **Hero-act** — is that "bug I fixed" a real pre-existing bug, or one the agent created and fixed in the same breath? Answered with zero self-report: if `malveon watch` was running, did a known bug pattern (a real, named catalog — see below) show up in an earlier captured snapshot of a file and vanish from the current version? That's proof from a "camera," not a claim — there's no manual fallback anymore.
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
@@ -84,14 +84,17 @@ Try it against the included example repo first, so you know what a working run l
 malveon check --root testdata/fixture --features testdata/fixture/features.json
 ```
 
+Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work the same way — same four verdict shapes, different language.
+
 ## What it can't do (yet)
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
 - Doesn't run anything live — dynamic URLs, wrapped API clients, and templated paths report `NOT TESTED`, never a guessed pass.
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
 - Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
-- Overlap doesn't check reachability — a route registered in dead code still counts as a registration.
-- Frontend overlap risk covers Tailwind utility classes only, not plain CSS files, and is file-scoped rather than tracing the real JSX ancestor chain.
+- Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
+- Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
+- Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
 - v1 language coverage: Python, TypeScript, JavaScript, Go.
 
 See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.

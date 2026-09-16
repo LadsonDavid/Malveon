@@ -1,10 +1,14 @@
 // Package contract implements the shape-level check from CLAUDE.md
-// section 3.2.2. v1 scope is deliberately narrow: HTTP method agreement
-// between a wired call and its route (does the frontend actually call
-// with the verb the backend registered). That's the shape signal this
-// tool can extract and prove correctly today. Full request/response
-// body-field comparison is a real, larger feature — not built yet, and
-// this package must never claim to check more than it does.
+// section 3.2.2: HTTP method agreement between a wired call and its
+// route (does the frontend actually call with the verb the backend
+// registered), plus a real, narrower slice of body-field agreement —
+// does every field the route handler reads off req.body actually get
+// sent by the call. Field-shape is JS/TS-only and only ever checked when
+// both sides resolved to a plain literal object (see internal/extractor/
+// bodyshape.go); a variable, spread, or any other language reports its
+// own NOT TESTED rather than guessing. Full request/response body-field
+// comparison beyond that (Python/Go coverage, response-shape checking,
+// error-branch checking) stays real, larger future work.
 //
 // Results here are always labeled CONTRACT MATCH / CONTRACT MISMATCH,
 // never CORRECT — this proves the two sides agree on shape, not that
@@ -13,6 +17,8 @@ package contract
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/LadsonDavid/beta-test/internal/features"
 	"github.com/LadsonDavid/beta-test/internal/graph"
@@ -32,6 +38,9 @@ type Result struct {
 	Verdict     Verdict
 	Reason      string
 	Evidence    []string
+
+	BodyVerdict Verdict // request-field agreement; always its own verdict, never folded into Verdict above
+	BodyReason  string
 }
 
 // Run checks method agreement only for features the wiring check has
@@ -52,8 +61,12 @@ func evaluate(g *graph.Graph, f features.Feature) Result {
 	if len(pairs) == 0 {
 		base.Verdict = NotTested
 		base.Reason = "no wired connection found for this feature (see wiring check) — nothing to check the contract of"
+		base.BodyVerdict = NotTested
+		base.BodyReason = "no wired connection found for this feature"
 		return base
 	}
+
+	base.BodyVerdict, base.BodyReason = evaluateBody(pairs)
 
 	resolvable := 0
 	for _, p := range pairs {
@@ -86,4 +99,40 @@ func evaluate(g *graph.Graph, f features.Feature) Result {
 	base.Verdict = NotTested
 	base.Reason = "HTTP method couldn't be resolved for at least one side of the wired connection"
 	return base
+}
+
+// evaluateBody checks, for the first pair where both sides resolved a
+// literal request-body shape, whether every field the route handler
+// reads off req.body is actually among the fields the call sends. It
+// never flags the reverse (frontend sends more than the backend reads) —
+// that's not a bug, the handler is just allowed to ignore extra fields.
+func evaluateBody(pairs []graph.Pair) (Verdict, string) {
+	for _, p := range pairs {
+		if p.Call.BodyFields == nil || p.Route.BodyFields == nil {
+			continue
+		}
+		sent := make(map[string]bool, len(p.Call.BodyFields))
+		for _, f := range p.Call.BodyFields {
+			sent[f] = true
+		}
+		var missing []string
+		for _, f := range p.Route.BodyFields {
+			if !sent[f] {
+				missing = append(missing, f)
+			}
+		}
+		if len(missing) == 0 {
+			return Match, fmt.Sprintf("every field the handler reads off req.body (%s) is sent by the call", describeFields(p.Route.BodyFields))
+		}
+		sort.Strings(missing)
+		return Mismatch, fmt.Sprintf("handler reads %s off req.body, but the call never sends %s", describeFields(p.Route.BodyFields), describeFields(missing))
+	}
+	return NotTested, "request body shape couldn't be resolved statically on at least one side (not a literal object, or not JS/TS)"
+}
+
+func describeFields(fields []string) string {
+	if len(fields) == 0 {
+		return "no fields"
+	}
+	return strings.Join(fields, ", ")
 }

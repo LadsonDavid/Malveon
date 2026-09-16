@@ -42,15 +42,19 @@ func WriteWiring(w io.Writer, results []wiring.Result) {
 }
 
 func WriteContract(w io.Writer, results []contract.Result) {
-	fmt.Fprintln(w, "CONTRACT CHECK — does the wired call agree with the route on HTTP method")
-	fmt.Fprintln(w, "(shape-level only — a MATCH here is not a claim that the business result is correct)")
+	fmt.Fprintln(w, "CONTRACT CHECK — does the wired call agree with the route on HTTP method and request fields")
+	fmt.Fprintln(w, "(shape-level only — a MATCH here is not a claim that the business result is correct;")
+	fmt.Fprintln(w, " body-field agreement is JS/TS-only, and only checked when both sides are a literal object)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	match, mismatch, notTested := 0, 0, 0
 	for _, r := range results {
-		fmt.Fprintf(w, "[%s] %s (%s)\n", r.Verdict, r.FeatureName, r.FeatureID)
+		fmt.Fprintf(w, "[method: %s] %s (%s)\n", r.Verdict, r.FeatureName, r.FeatureID)
 		fmt.Fprintf(w, "  reason: %s\n", r.Reason)
 		for _, e := range r.Evidence {
 			fmt.Fprintf(w, "  evidence: %s\n", e)
+		}
+		if r.BodyVerdict != "" {
+			fmt.Fprintf(w, "  [fields: %s] %s\n", r.BodyVerdict, r.BodyReason)
 		}
 		fmt.Fprintln(w)
 		switch r.Verdict {
@@ -62,7 +66,7 @@ func WriteContract(w io.Writer, results []contract.Result) {
 			notTested++
 		}
 	}
-	fmt.Fprintf(w, "%d MATCH, %d MISMATCH, %d NOT TESTED\n\n", match, mismatch, notTested)
+	fmt.Fprintf(w, "%d MATCH, %d MISMATCH, %d NOT TESTED (method agreement)\n\n", match, mismatch, notTested)
 }
 
 func WritePlanAuthority(w io.Writer, res planauthority.Result) {
@@ -119,8 +123,11 @@ func WriteOverlap(w io.Writer, findings []overlap.Finding) {
 	}
 	for _, f := range findings {
 		fmt.Fprintf(w, "[OVERLAP] %s %s — registered %d times\n", f.Method, f.Path, len(f.Nodes))
-		for _, n := range f.Nodes {
+		for i, n := range f.Nodes {
 			fmt.Fprintf(w, "  evidence: %s:%d\n", n.File, n.Line)
+			if i < len(f.Notes) && f.Notes[i] != "" {
+				fmt.Fprintf(w, "    note: %s\n", f.Notes[i])
+			}
 		}
 		fmt.Fprintln(w)
 	}

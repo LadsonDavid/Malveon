@@ -79,3 +79,72 @@ function Header() {
 		t.Fatalf("expected 1 finding for a fixed element with no context, got %d: %+v", len(findings), findings)
 	}
 }
+
+// TestRunPlainCSS covers the real gap: Tailwind-only coverage missed
+// plain stylesheets entirely. Same risk shape, just via an actual
+// position: declaration instead of a utility class name.
+func TestRunPlainCSS(t *testing.T) {
+	dir := t.TempDir()
+
+	// Risk: .badge escapes, no relative/sticky anywhere in the file.
+	writeFile(t, dir, "badge.css", `
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+`)
+
+	// Safe: .tooltip escapes, but .panel in the same file is relative.
+	writeFile(t, dir, "panel.css", `
+.panel {
+  position: relative;
+}
+.tooltip {
+  position: fixed;
+}
+`)
+
+	// Not flagged: no position declarations that matter (static is the default).
+	writeFile(t, dir, "layout.css", `
+.row {
+  display: flex;
+  position: static;
+}
+`)
+
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly 1 finding, got %d: %+v", len(findings), findings)
+	}
+	if findings[0].File != "badge.css" {
+		t.Errorf("expected the finding in badge.css, got %q", findings[0].File)
+	}
+}
+
+// TestRunPlainCSSNestedContextNotMissed proves the reason context
+// detection scans the whole file as flat text instead of brace-pairing
+// each declaration with its selector: a parent selector's own `relative`
+// must still suppress a nested child's `absolute`, even though a naive
+// brace-matcher would fail to pair them due to the nesting.
+func TestRunPlainCSSNestedContextNotMissed(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "card.scss", `
+.card {
+  position: relative;
+  .badge {
+    position: absolute;
+  }
+}
+`)
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (.card's relative should suppress .badge's absolute despite nesting), got %d: %+v", len(findings), findings)
+	}
+}

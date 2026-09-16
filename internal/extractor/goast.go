@@ -83,7 +83,30 @@ func scanGo(src string, fset *token.FileSet, file *ast.File) []callSite {
 		return true
 	})
 
+	ranges := goFuncRanges(fset, file)
+	for i := range sites {
+		sites[i].enclosingFunc = enclosingFuncFor(ranges, sites[i].line)
+	}
 	return sites
+}
+
+// goFuncRanges collects every named function/method declaration's line
+// span, the same structural fact jsFuncRanges/pyFuncRanges compute by
+// hand for JS/Python — Go gets it for free from the real AST.
+func goFuncRanges(fset *token.FileSet, file *ast.File) []funcRange {
+	var ranges []funcRange
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		ranges = append(ranges, funcRange{
+			name:      fn.Name.Name,
+			startLine: fset.Position(fn.Pos()).Line,
+			endLine:   fset.Position(fn.End()).Line,
+		})
+	}
+	return ranges
 }
 
 // firstStringArg returns the raw quoted-literal text of a call's first

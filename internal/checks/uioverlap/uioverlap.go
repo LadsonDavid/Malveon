@@ -22,8 +22,19 @@
 // the file has an unrelated `relative` element that isn't actually this
 // element's ancestor; that's a known trade-off for staying simple and
 // correct about what it does check, not a hidden gap.
-// Plain-CSS-file cascade resolution (the general case beyond Tailwind
-// utility classes) is explicitly deferred, not built.
+// Plain-CSS files (.css/.scss/.less) get the same file-scoped heuristic,
+// applied to the actual `position:` declaration instead of a utility
+// class name: a file with position: absolute/fixed anywhere and no
+// position: relative/sticky anywhere is flagged. Context detection
+// deliberately scans the whole file as flat text rather than trying to
+// pair each declaration with its enclosing selector via brace-matching —
+// real CSS/SCSS nesting (a parent selector's own `relative` inside a
+// block that also contains a nested `absolute` child) would make a
+// brace-matched scan miss the parent's declaration and produce a false
+// positive; a flat "does this value appear anywhere in the file" search
+// can't undercount a real context declaration that way. The cost is the
+// same one already accepted for Tailwind: file-scoped, not ancestor-
+// precise, real future work if that ever needs tightening.
 package uioverlap
 
 import (
@@ -57,6 +68,8 @@ var escapingClasses = map[string]bool{
 	"absolute": true, "fixed": true,
 }
 
+var cssPositionDeclPattern = regexp.MustCompile(`(?i)position\s*:\s*(absolute|fixed|relative|sticky)\b`)
+
 // Run scans every JSX/TSX/HTML file under root and returns one finding
 // per file that has an absolute/fixed element but no positioning context
 // anywhere in the same file.
@@ -73,8 +86,13 @@ func Run(root string) ([]Finding, error) {
 			}
 			return nil
 		}
-		switch strings.ToLower(filepath.Ext(path)) {
+		ext := strings.ToLower(filepath.Ext(path))
+		var scan func(file, src string) []Finding
+		switch ext {
 		case ".jsx", ".tsx", ".html", ".vue":
+			scan = scanFile
+		case ".css", ".scss", ".less":
+			scan = scanCSSFile
 		default:
 			return nil
 		}
@@ -89,7 +107,7 @@ func Run(root string) ([]Finding, error) {
 			rel = path
 		}
 
-		findings = append(findings, scanFile(rel, src)...)
+		findings = append(findings, scan(rel, src)...)
 		return nil
 	})
 	if err != nil {
@@ -142,6 +160,44 @@ func scanFile(file, src string) []Finding {
 			Line:    c.line,
 			Classes: c.classes,
 			Reason:  "positioned element (absolute/fixed) with no positioning context (relative/absolute/fixed/sticky) found anywhere in this file — likely escapes its intended container",
+		})
+	}
+	return findings
+}
+
+// scanCSSFile flags every position: absolute/fixed declaration in a
+// plain CSS/SCSS/LESS file that has no position: relative/sticky
+// declaration anywhere in the same file. See the package doc comment
+// for why context detection deliberately doesn't try to pair a
+// declaration with its enclosing selector.
+func scanCSSFile(file, src string) []Finding {
+	matches := cssPositionDeclPattern.FindAllStringSubmatchIndex(src, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	hasContext := false
+	var candidateOffsets []int
+	for _, m := range matches {
+		value := strings.ToLower(src[m[2]:m[3]])
+		if value == "relative" || value == "sticky" {
+			hasContext = true
+			continue
+		}
+		candidateOffsets = append(candidateOffsets, m[0])
+	}
+
+	if hasContext || len(candidateOffsets) == 0 {
+		return nil
+	}
+
+	findings := make([]Finding, 0, len(candidateOffsets))
+	for _, offset := range candidateOffsets {
+		findings = append(findings, Finding{
+			File:    file,
+			Line:    lineOf(src, offset),
+			Classes: "position: absolute/fixed",
+			Reason:  "plain CSS declares position: absolute/fixed with no position: relative/sticky found anywhere in this file — likely escapes its intended container",
 		})
 	}
 	return findings

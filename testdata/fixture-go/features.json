@@ -1,0 +1,6 @@
+[
+  { "id": "refund", "name": "refund" },
+  { "id": "cancel-order", "name": "cancel order" },
+  { "id": "profile", "name": "profile" },
+  { "id": "update-settings", "name": "update settings" }
+]

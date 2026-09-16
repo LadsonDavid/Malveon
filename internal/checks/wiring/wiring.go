@@ -47,7 +47,7 @@ func evaluate(g *graph.Graph, f features.Feature) Result {
 
 	if len(calls) == 0 || len(routes) == 0 {
 		base.Verdict = NotTested
-		base.Reason = "no matching frontend and/or backend node found for this feature"
+		base.Reason = missingSideReason(len(calls), len(routes))
 		return base
 	}
 
@@ -77,6 +77,21 @@ func evaluate(g *graph.Graph, f features.Feature) Result {
 	base.Reason = "path couldn't be resolved statically for at least one matching node (dynamic URL, variable, or template)"
 	base.Evidence = evidenceFor(calls, routes)
 	return base
+}
+
+// missingSideReason names exactly which side couldn't be matched, instead
+// of the old one-size-fits-all "frontend and/or backend" message — a
+// backend built with no frontend, a frontend built with no backend, and
+// neither existing are three different, useful facts to a reviewer.
+func missingSideReason(numCalls, numRoutes int) string {
+	switch {
+	case numCalls == 0 && numRoutes == 0:
+		return "no matching frontend or backend node found for this feature"
+	case numCalls == 0:
+		return "backend route found, but no matching frontend call — feature may be built one-sided"
+	default:
+		return "frontend call found, but no matching backend route — feature may be built one-sided"
+	}
 }
 
 func allExtracted(nodes []graph.Node) bool {

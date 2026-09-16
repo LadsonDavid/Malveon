@@ -34,13 +34,15 @@ const (
 
 // Node is one extracted call or route registration.
 type Node struct {
-	Kind        Kind
-	File        string
-	Line        int
-	Method      string     // HTTP verb if known, "" if not applicable/unknown
-	Path        string     // the literal path string, "" if not resolvable statically
-	Confidence  Confidence // Extracted only when Path is a real literal
-	Words       []string   // tokens used for loose feature-name matching
+	Kind          Kind
+	File          string
+	Line          int
+	Method        string     // HTTP verb if known, "" if not applicable/unknown
+	Path          string     // the literal path string, "" if not resolvable statically
+	Confidence    Confidence // Extracted only when Path is a real literal
+	Words         []string   // tokens used for loose feature-name matching
+	EnclosingFunc string     // name of the innermost named function this node's line falls inside; "" if top-level or unknown
+	BodyFields    []string   // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved, non-nil (possibly empty) if resolved
 }
 
 // Graph is just the flat set of nodes a run produced.

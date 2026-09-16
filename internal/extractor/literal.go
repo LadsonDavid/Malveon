@@ -10,10 +10,39 @@ import (
 // callSite is a raw hit before we've decided whether its argument is a
 // resolvable literal.
 type callSite struct {
-	kind   graph.Kind
-	method string // "" if not applicable
-	line   int
-	argRaw string // raw text of the first argument, unparsed
+	kind          graph.Kind
+	method        string // "" if not applicable
+	line          int
+	argRaw        string // raw text of the first argument, unparsed
+	enclosingFunc string // name of the innermost named function containing this call, "" if top-level/unknown
+	bodyFields    []string // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved
+}
+
+// funcRange is one named function's line span, used to work out which
+// function (if any) a given call site sits inside — a structural fact
+// the overlap check's reachability signal is built on (internal/checks/overlap).
+type funcRange struct {
+	name      string
+	startLine int
+	endLine   int
+}
+
+// enclosingFuncFor returns the name of the smallest funcRange containing
+// line, or "" if none does (i.e. the line is top-level module code).
+func enclosingFuncFor(ranges []funcRange, line int) string {
+	best := ""
+	bestSpan := -1
+	for _, r := range ranges {
+		if line < r.startLine || line > r.endLine {
+			continue
+		}
+		span := r.endLine - r.startLine
+		if bestSpan == -1 || span < bestSpan {
+			bestSpan = span
+			best = r.name
+		}
+	}
+	return best
 }
 
 var (
@@ -28,6 +57,13 @@ var (
 	pyRoutePattern = regexp.MustCompile(`(?i)@\w+\.(route|get|post|put|delete|patch)\s*\(`)
 	// Python: requests.get("/x"), requests.post("/x")
 	pyRequestPattern = regexp.MustCompile(`(?i)\brequests\.(get|post|put|delete|patch)\s*\(`)
+
+	// Named JS/TS functions whose body might contain a call site:
+	// function name(...) { ... }, and const/let/var name = (...) => { ... }
+	// or = function(...) { ... }. Anonymous functions have no name to
+	// reference elsewhere, so they're deliberately not tracked here.
+	jsFuncDeclPattern   = regexp.MustCompile(`(?:^|\W)(?:async\s+)?function\s+(\w+)\s*\([^)]*\)\s*\{`)
+	jsFuncAssignPattern = regexp.MustCompile(`\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function\s*\([^)]*\)|\([^)]*\)\s*=>|[\w$]+\s*=>)\s*\{`)
 )
 
 // scanJSLike extracts route/network call sites from JavaScript or
@@ -41,34 +77,102 @@ func scanJSLike(src string) []callSite {
 	for _, m := range jsRoutePattern.FindAllStringSubmatchIndex(src, -1) {
 		openParen := m[1] - 1
 		arg := readFirstArg(src, openParen)
+		readFields, _ := jsReadFieldsFromHandler(readArgsList(src, openParen))
 		sites = append(sites, callSite{
-			kind:   graph.RouteHandler,
-			method: strings.ToUpper(src[m[2]:m[3]]),
-			line:   lineOf(src, m[0]),
-			argRaw: arg,
+			kind:       graph.RouteHandler,
+			method:     strings.ToUpper(src[m[2]:m[3]]),
+			line:       lineOf(src, m[0]),
+			argRaw:     arg,
+			bodyFields: readFields,
 		})
 	}
 	for _, m := range jsFetchPattern.FindAllStringIndex(src, -1) {
 		openParen := m[1] - 1
 		arg := readFirstArg(src, openParen)
+		argsList := readArgsList(src, openParen)
+		sentFields, _ := jsSentFieldsFromCallArgs(argsList)
 		sites = append(sites, callSite{
-			kind:   graph.NetworkCall,
-			method: fetchMethod(readArgsList(src, openParen)),
-			line:   lineOf(src, m[0]),
-			argRaw: arg,
+			kind:       graph.NetworkCall,
+			method:     fetchMethod(argsList),
+			line:       lineOf(src, m[0]),
+			argRaw:     arg,
+			bodyFields: sentFields,
 		})
 	}
 	for _, m := range jsAxiosPattern.FindAllStringSubmatchIndex(src, -1) {
 		openParen := m[1] - 1
 		arg := readFirstArg(src, openParen)
+		sentFields, _ := jsSentFieldsFromCallArgs(readArgsList(src, openParen))
 		sites = append(sites, callSite{
-			kind:   graph.NetworkCall,
-			method: strings.ToUpper(src[m[2]:m[3]]),
-			line:   lineOf(src, m[0]),
-			argRaw: arg,
+			kind:       graph.NetworkCall,
+			method:     strings.ToUpper(src[m[2]:m[3]]),
+			line:       lineOf(src, m[0]),
+			argRaw:     arg,
+			bodyFields: sentFields,
 		})
 	}
+
+	ranges := jsFuncRanges(src)
+	for i := range sites {
+		sites[i].enclosingFunc = enclosingFuncFor(ranges, sites[i].line)
+	}
 	return sites
+}
+
+// jsFuncRanges finds every named function declaration/assignment in src
+// and returns its name and line span, by locating the opening brace after
+// the signature and walking forward to its balanced match.
+func jsFuncRanges(src string) []funcRange {
+	var ranges []funcRange
+	for _, pat := range []*regexp.Regexp{jsFuncDeclPattern, jsFuncAssignPattern} {
+		for _, m := range pat.FindAllStringSubmatchIndex(src, -1) {
+			name := src[m[2]:m[3]]
+			openBrace := m[1] - 1
+			closeBrace := matchBrace(src, openBrace)
+			ranges = append(ranges, funcRange{
+				name:      name,
+				startLine: lineOf(src, m[0]),
+				endLine:   lineOf(src, closeBrace),
+			})
+		}
+	}
+	return ranges
+}
+
+// matchBrace walks forward from an opening '{' and returns the index of
+// its balanced closing '}', respecting quotes so a brace inside a string
+// or template literal doesn't throw the count off.
+func matchBrace(src string, openBraceIdx int) int {
+	depth := 0
+	var quote byte
+	i := openBraceIdx
+	for i < len(src) {
+		c := src[i]
+		if quote != 0 {
+			if c == '\\' {
+				i += 2
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			i++
+			continue
+		}
+		switch c {
+		case '\'', '"', '`':
+			quote = c
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+		i++
+	}
+	return len(src) - 1
 }
 
 // scanPython extracts Flask/FastAPI-style route decorators and
@@ -100,7 +204,49 @@ func scanPython(src string) []callSite {
 			argRaw: arg,
 		})
 	}
+
+	ranges := pyFuncRanges(src)
+	for i := range sites {
+		sites[i].enclosingFunc = enclosingFuncFor(ranges, sites[i].line)
+	}
 	return sites
+}
+
+var pyDefPattern = regexp.MustCompile(`(?m)^([ \t]*)def\s+(\w+)\s*\(`)
+
+// pyFuncRanges finds every "def name(" and, since Python scopes by
+// indentation rather than braces, walks forward line by line until a
+// non-blank line dedents back to (or past) the def's own indentation —
+// that's where the function body ends.
+func pyFuncRanges(src string) []funcRange {
+	lines := strings.Split(src, "\n")
+	var ranges []funcRange
+	for _, m := range pyDefPattern.FindAllStringSubmatchIndex(src, -1) {
+		indent := src[m[2]:m[3]]
+		name := src[m[4]:m[5]]
+		startLine := lineOf(src, m[0])
+		endLine := len(lines)
+		for i := startLine; i < len(lines); i++ { // lines[i] is 1-indexed line i+1, i.e. the line after startLine
+			text := lines[i]
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			if len(leadingWhitespace(text)) <= len(indent) {
+				endLine = i // 0-indexed i == 1-indexed line i, the last body line
+				break
+			}
+		}
+		ranges = append(ranges, funcRange{name: name, startLine: startLine, endLine: endLine})
+	}
+	return ranges
+}
+
+func leadingWhitespace(s string) string {
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	return s[:i]
 }
 
 // readFirstArg walks forward from an opening paren and returns the raw

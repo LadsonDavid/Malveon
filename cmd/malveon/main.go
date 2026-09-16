@@ -138,7 +138,7 @@ func runCheck(args []string) {
 
 	report.WriteWiring(os.Stdout, wiringResults)
 	report.WriteContract(os.Stdout, contract.Run(g, fs))
-	report.WriteOverlap(os.Stdout, overlap.Run(g))
+	report.WriteOverlap(os.Stdout, overlap.Run(g, *root))
 
 	uiFindings, uiErr := uioverlap.Run(*root)
 	if uiErr != nil {

@@ -75,10 +75,12 @@ func Extract(root string) (*graph.Graph, error) {
 
 func toNode(file string, s callSite) graph.Node {
 	n := graph.Node{
-		Kind:   s.kind,
-		File:   file,
-		Line:   s.line,
-		Method: s.method,
+		Kind:          s.kind,
+		File:          file,
+		Line:          s.line,
+		Method:        s.method,
+		EnclosingFunc: s.enclosingFunc,
+		BodyFields:    s.bodyFields,
 	}
 	if path, ok := literalPath(s.argRaw); ok {
 		n.Path = path
