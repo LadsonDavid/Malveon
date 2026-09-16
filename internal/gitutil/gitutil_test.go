@@ -76,3 +76,35 @@ func TestCurrentRefNoCommits(t *testing.T) {
 		t.Fatal("expected an error when the repo has no commits yet")
 	}
 }
+
+func TestFileAtRef(t *testing.T) {
+	dir := initTempRepo(t)
+	writeFile(t, dir, "a.go", "package a\n// v1\n")
+	commitAll(t, dir, "initial")
+	baseRef, err := CurrentRef(dir)
+	if err != nil {
+		t.Fatalf("CurrentRef: %v", err)
+	}
+
+	writeFile(t, dir, "a.go", "package a\n// v2\n")
+	writeFile(t, dir, "new.go", "package a\n// brand new\n")
+
+	content, existed, err := FileAtRef(dir, baseRef, "a.go")
+	if err != nil {
+		t.Fatalf("FileAtRef: %v", err)
+	}
+	if !existed {
+		t.Fatal("expected a.go to have existed at baseRef")
+	}
+	if content != "package a\n// v1\n" {
+		t.Errorf("expected baseline content, got %q", content)
+	}
+
+	_, existed, err = FileAtRef(dir, baseRef, "new.go")
+	if err != nil {
+		t.Fatalf("FileAtRef: %v", err)
+	}
+	if existed {
+		t.Fatal("expected new.go to not have existed at baseRef")
+	}
+}

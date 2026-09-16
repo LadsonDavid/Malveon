@@ -93,24 +93,28 @@ func WritePlanAuthority(w io.Writer, res planauthority.Result) {
 }
 
 func WriteHeroPatterns(w io.Writer, res heropatterns.Report) {
-	fmt.Fprintln(w, "HERO-ACT CHECK — known bug patterns introduced and fixed this session, from captured history")
-	fmt.Fprintln(w, "(no self-report, no commits — requires `malveon watch` to have been running)")
+	fmt.Fprintln(w, "HERO-ACT CHECK — known bug patterns this session's own code introduced, no self-report")
+	fmt.Fprintln(w, "(git baseline always runs once a session started; `malveon watch` adds detection for a")
+	fmt.Fprintln(w, " pattern that appeared and disappeared entirely within the session)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !res.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
 		return
 	}
+	if !res.WatchAvailable {
+		fmt.Fprintf(w, "note: %s — \"introduced and fixed within the session\" detection didn't run this time\n\n", res.WatchReason)
+	}
 	if len(res.Findings) == 0 {
-		fmt.Fprintln(w, "nothing flagged — no known bug pattern appeared and then disappeared this session")
+		fmt.Fprintln(w, "nothing flagged — no known bug pattern was introduced this session")
 		fmt.Fprintln(w)
 		return
 	}
 	for _, f := range res.Findings {
-		fmt.Fprintf(w, "[SELF-INTRODUCED, FOUND & FIXED SAME SESSION] %s — %s\n", f.File, f.Pattern)
+		fmt.Fprintf(w, "[%s] %s — %s\n", f.Status, f.File, f.Pattern)
 		fmt.Fprintf(w, "  reason: %s\n", f.Reason)
 		fmt.Fprintln(w)
 	}
-	fmt.Fprintf(w, "%d SELF-INTRODUCED\n\n", len(res.Findings))
+	fmt.Fprintf(w, "%d FOUND\n\n", len(res.Findings))
 }
 
 func WriteOverlap(w io.Writer, findings []overlap.Finding) {

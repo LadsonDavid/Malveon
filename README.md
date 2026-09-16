@@ -15,7 +15,7 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Overlap** — do two or more route registrations silently claim the same method+path? Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
 - **Frontend overlap risk** — is an `absolute`/`fixed` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)?
 - **Not-in-plan** — did the agent build something this session that your plan never asked for?
-- **Hero-act** — is that "bug I fixed" a real pre-existing bug, or one the agent created and fixed in the same breath? Answered with zero self-report: if `malveon watch` was running, did a known bug pattern (a real, named catalog — see below) show up in an earlier captured snapshot of a file and vanish from the current version? That's proof from a "camera," not a claim — there's no manual fallback anymore.
+- **Hero-act** — did this session's own code introduce a known bug pattern — whether it's still sitting there right now, or got fixed along the way? Two zero-self-report signals: a git-baseline comparison (always on once a session started — catches a bug that's still live) and, if `malveon watch` was running, a captured-snapshot comparison (catches one that appeared and disappeared entirely within the session, which a single before/after diff can't see).
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
 
@@ -39,7 +39,7 @@ malveon check
 
 That's it. `malveon check` with no flags: looks for a plan file in the current folder automatically (asks if it's ambiguous, never guesses), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, and reads known-bug-pattern findings from whatever `malveon watch` captured while it ran — nothing to ask the agent, nothing to paste, for any of it.
 
-`malveon watch` is optional but worth running — without it, hero-act just reports itself unavailable (there's no manual fallback). With it, hero-act catches a real, named catalog of bug patterns (an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) automatically, purely from what it captured while the agent worked — no self-report involved at all.
+`malveon watch` is optional — hero-act still works without it, using the git-baseline signal alone (catches a bad pattern that's still present right now). Running it adds a second signal: catching a bad pattern (a real, named catalog — an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) that appeared and got fixed entirely within the session, which the git comparison alone can't see. No self-report involved either way.
 
 Want to override any of the automatic behavior?
 

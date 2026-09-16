@@ -69,6 +69,20 @@ func CommitMessagesSince(root, baseRef string) ([]string, error) {
 	return messages, nil
 }
 
+// FileAtRef returns a file's content as of ref, and whether it existed
+// at all at that ref. A file that didn't exist yet at ref (created
+// during the session) returns ("", false, nil) rather than an error —
+// that absence is itself useful information: anything in the file now
+// was necessarily written this session, since there's no earlier
+// version to have contained it.
+func FileAtRef(root, ref, path string) (string, bool, error) {
+	out, err := run(root, "show", ref+":"+path)
+	if err != nil {
+		return "", false, nil
+	}
+	return out, true, nil
+}
+
 func splitLines(s string) []string {
 	var out []string
 	for _, line := range strings.Split(s, "\n") {
