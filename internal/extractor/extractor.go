@@ -96,12 +96,40 @@ func toNode(file string, s callSite) graph.Node {
 	return n
 }
 
+// reservedBaseNames are filenames so common across a codebase that they
+// carry no identifying signal on their own — Next.js's App Router
+// reserves "page"/"layout"/etc. for a role, not a topic, and nearly
+// every route segment has one; "index"/"main"/"__init__" are the same
+// story in plain JS/TS/Go/Python. Confirmed 2026-09-16 against a real
+// project: a feature description that happened to contain the ordinary
+// word "page" matched 75 unrelated page.tsx files across the whole app,
+// because that word was the *only* thing distinguishing those nodes.
+// Excluding these from a file's own name-derived words means such a
+// node is only ever matched by something real — a resolved path segment
+// — never by riding along on its reserved role.
+var reservedBaseNames = map[string]bool{
+	// Next.js App Router special files
+	"page": true, "layout": true, "loading": true, "error": true,
+	"template": true, "default": true, "not-found": true, "route": true,
+	"global-error": true, "middleware": true,
+	// General JS/TS entry point
+	"index": true,
+	// Go
+	"main": true,
+	// Python
+	"__init__": true,
+}
+
 // wordsFor turns a file path and a route path into a flat set of lowercase
 // tokens used for loose feature-name matching (e.g. "refund button"
 // matching a "/refund" route defined in "RefundButton.jsx").
 func wordsFor(file, path string) []string {
 	var words []string
-	words = append(words, splitWords(filepath.Base(file))...)
+	base := filepath.Base(file)
+	stem := strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
+	if !reservedBaseNames[stem] {
+		words = append(words, splitWords(base)...)
+	}
 	if path != "" {
 		for _, seg := range strings.Split(strings.Trim(path, "/"), "/") {
 			if seg == "" || strings.HasPrefix(seg, ":") || strings.HasPrefix(seg, "{") {

@@ -73,3 +73,29 @@ func main() {
 		t.Errorf("expected 1 outbound call (httpClient.Get), got %d: %+v", calls, sites)
 	}
 }
+
+// TestWordsForExcludesReservedFilenames covers the real matching bug a
+// real project found: a plain-English word in a feature description
+// ("page") must never accidentally match every file that happens to
+// share a framework-reserved name, since that name says nothing about
+// what the file actually does.
+func TestWordsForExcludesReservedFilenames(t *testing.T) {
+	cases := []struct {
+		file string
+		path string
+		want []string
+	}{
+		{"src/app/circles/page.tsx", "", nil},
+		{"src/app/circles/page.tsx", "/circles", []string{"circles"}},
+		{"src/index.ts", "", nil},
+		{"cmd/malveon/main.go", "", nil},
+		{"pkg/__init__.py", "", nil},
+		{"src/components/RefundButton.jsx", "", []string{"refund", "button"}},
+	}
+	for _, tc := range cases {
+		got := wordsFor(tc.file, tc.path)
+		if !equalSets(got, tc.want) {
+			t.Errorf("wordsFor(%q, %q) = %v, want %v", tc.file, tc.path, got, tc.want)
+		}
+	}
+}
