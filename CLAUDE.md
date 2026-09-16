@@ -51,11 +51,16 @@ A features/plan file in whatever format the user already has it in — no fixed 
 
 IDs are generated from the name (slugified, de-duplicated) for Markdown/text input, since those formats don't carry an explicit ID.
 
-**Finding the plan file (confirmed 2026-09-16 — the command shouldn't need memorizing):** `--features <path>` is optional, not required. When omitted, `features.Detect(root)` looks (top-level only, not recursive) for files whose name contains "plan"/"feature"/"checklist"/"todo" (case-insensitive) with a supported extension:
+**Finding the plan file (confirmed 2026-09-16 — the command shouldn't need memorizing):** `--features <path>` is optional, not required. When omitted, resolution runs in two tiers:
+
+1. `features.Detect(root)` — top-level only, not recursive — looks for files whose *name* contains "plan"/"feature"/"checklist"/"todo" (case-insensitive) with a supported extension. Fast, precise, the common case.
+2. If that finds nothing (the plan could be named anything — confirmed 2026-09-16), `features.DetectByContent(root)` falls back to checking file *content*: a `.json` file is a candidate only if it parses as an array of objects each with a non-empty `name` field (the real shape this tool expects, not just "is it JSON"); a `.md`/`.markdown` file is a candidate only if it has at least 2 real checklist-syntax lines. `.txt` is deliberately excluded from this fallback — a bare text file with no name hint and no structural markers has no reliable content signal, and guessing there would break the tool's own rule.
+
+Whichever tier produced the candidates, the same resolution applies:
 
 - Exactly one candidate → used automatically, and the choice is printed (`using plan file: PLAN.md`) — never silent.
 - More than one candidate → the tool asks which one, interactively (numbered list, bare Enter picks the first).
-- No candidates → the tool asks for a path directly.
+- No candidates (from either tier) → the tool asks for a path directly.
 - Not running in a real terminal (stdin isn't a TTY — scripts/CI) and the answer is ambiguous or missing → fails immediately with a clear error naming the candidates, rather than hanging waiting for input that will never come.
 
 Same rule as everywhere else in this tool: never guess, and when unsure, ask instead of picking silently. `--features` still works exactly as before and skips the whole detection/prompt step, which is what scripts and CI should use.

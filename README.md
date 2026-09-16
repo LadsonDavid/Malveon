@@ -51,7 +51,12 @@ Both are optional — leave either out and that section of the report shows itse
 
 ## The plan file
 
-Whatever format you already keep your plan in — no fixed shape forced on you. Auto-detected by filename (anything containing "plan," "feature," "checklist," or "todo") and extension:
+Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename required. Auto-detection tries two ways:
+
+1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension.
+2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`.
+
+If nothing matches either way, or more than one file looks right, it asks — never guesses.
 
 **JSON** (`.json`):
 ```json

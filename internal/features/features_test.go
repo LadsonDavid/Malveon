@@ -109,6 +109,45 @@ func TestDetectNoMatches(t *testing.T) {
 	}
 }
 
+func writeIn(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDetectByContentFindsUnnamedFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	// No name hint at all, but the content genuinely looks like a plan.
+	writeIn(t, dir, "sprint3.json", `[{"id":"a","name":"refund button"},{"id":"b","name":"cancel order"}]`)
+	writeIn(t, dir, "notes.md", "# Notes\n\n- [ ] Refund button\n- [x] Cancel order\n")
+
+	// Should NOT be picked up: valid JSON, but not shaped like our
+	// feature list (no "name" field), and a markdown file with fewer
+	// than 2 real checklist lines.
+	writeIn(t, dir, "config.json", `{"port": 8080, "debug": true}`)
+	writeIn(t, dir, "CHANGELOG.md", "# Changelog\n\n## v1.0\n\nInitial release.\n")
+
+	candidates, err := DetectByContent(dir)
+	if err != nil {
+		t.Fatalf("DetectByContent: %v", err)
+	}
+
+	want := map[string]bool{
+		filepath.Join(dir, "sprint3.json"): true,
+		filepath.Join(dir, "notes.md"):     true,
+	}
+	if len(candidates) != len(want) {
+		t.Fatalf("got %d candidates, want %d: %v", len(candidates), len(want), candidates)
+	}
+	for _, c := range candidates {
+		if !want[c] {
+			t.Errorf("unexpected candidate: %s (config.json, CHANGELOG.md should never match)", c)
+		}
+	}
+}
+
 func TestLoadDuplicateNamesGetDistinctIDs(t *testing.T) {
 	p := writeTemp(t, "plan.txt", "Refund Button\nrefund button\n")
 	fs, err := Load(p)

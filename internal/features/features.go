@@ -82,6 +82,68 @@ func Detect(root string) ([]string, error) {
 	return candidates, nil
 }
 
+// DetectByContent is the fallback when Detect's name match finds nothing
+// — the plan could be named anything. Scans every .json/.md/.markdown
+// file in root (not .txt — a bare text file with no name hint has no
+// reliable content signal either; asking the user is the honest move
+// there, not guessing from "a file with some lines in it") and checks
+// whether its *content* actually looks like a plan, not just its
+// extension:
+//   - .json: parses as an array of objects, each with a non-empty
+//     "name" field — the real shape this tool expects, not just "is
+//     it valid JSON."
+//   - .md/.markdown: contains at least 2 real checklist-syntax lines
+//     (see checklistItemPattern) — a strong, specific signal, not just
+//     "the file has some bullet points somewhere."
+//
+// Same rule as everywhere else: this only ever proposes candidates for
+// the caller to confirm or choose between, never picks one silently.
+func DetectByContent(root string) ([]string, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("looking for a plan file in %s: %w", root, err)
+	}
+	var candidates []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".json" && ext != ".md" && ext != ".markdown" {
+			continue
+		}
+		path := filepath.Join(root, name)
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
+		}
+		if contentLooksLikePlan(ext, raw) {
+			candidates = append(candidates, path)
+		}
+	}
+	sort.Strings(candidates)
+	return candidates, nil
+}
+
+func contentLooksLikePlan(ext string, raw []byte) bool {
+	if ext == ".json" {
+		var items []map[string]any
+		if json.Unmarshal(raw, &items) != nil || len(items) == 0 {
+			return false
+		}
+		for _, item := range items {
+			name, ok := item["name"].(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return false
+			}
+		}
+		return true
+	}
+	// .md / .markdown
+	return len(parseChecklistLines(string(raw))) >= 2
+}
+
 func parseJSON(raw []byte) ([]Feature, error) {
 	var fs []Feature
 	if err := json.Unmarshal(raw, &fs); err != nil {
