@@ -2,3 +2,8 @@
 /malveon.exe
 /dist/
 .malveon/
+
+# private research material — never belongs in this tool's own repo,
+# see CLAUDE.md section 1 ("nothing from Malveon's internal apps,
+# business logic, or credentials gets copied in here")
+/reddit chats/
