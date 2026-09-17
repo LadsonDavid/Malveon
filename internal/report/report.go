@@ -38,7 +38,7 @@ func WriteWiring(w io.Writer, results []wiring.Result) {
 			notTested++
 		}
 	}
-	fmt.Fprintf(w, "%d PASS, %d FAIL, %d NOT TESTED\n\n", pass, fail, notTested)
+	fmt.Fprintf(w, "%d PASS, %d FAIL, %d NO PROOF\n\n", pass, fail, notTested)
 }
 
 func WriteContract(w io.Writer, results []contract.Result) {
@@ -66,7 +66,7 @@ func WriteContract(w io.Writer, results []contract.Result) {
 			notTested++
 		}
 	}
-	fmt.Fprintf(w, "%d MATCH, %d MISMATCH, %d NOT TESTED (method agreement)\n\n", match, mismatch, notTested)
+	fmt.Fprintf(w, "%d MATCH, %d MISMATCH, %d NO PROOF (method agreement)\n\n", match, mismatch, notTested)
 }
 
 func WritePlanAuthority(w io.Writer, res planauthority.Result) {
@@ -203,5 +203,5 @@ func WriteConfidence(w io.Writer, report confidence.Report) {
 			notClaimed++
 		}
 	}
-	fmt.Fprintf(w, "%d CONFIRMED, %d CONFIDENCE MISMATCH, %d NOT TESTED\n\n", confirmed, mismatch, notClaimed)
+	fmt.Fprintf(w, "%d CONFIRMED, %d CONFIDENCE MISMATCH, %d NOT CLAIMED\n\n", confirmed, mismatch, notClaimed)
 }

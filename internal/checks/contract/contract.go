@@ -6,7 +6,7 @@
 // sent by the call. Field-shape is JS/TS-only and only ever checked when
 // both sides resolved to a plain literal object (see internal/extractor/
 // bodyshape.go); a variable, spread, or any other language reports its
-// own NOT TESTED rather than guessing. Full request/response body-field
+// own NO PROOF rather than guessing. Full request/response body-field
 // comparison beyond that (Python/Go coverage, response-shape checking,
 // error-branch checking) stays real, larger future work.
 //
@@ -29,7 +29,7 @@ type Verdict string
 const (
 	Match     Verdict = "CONTRACT MATCH"
 	Mismatch  Verdict = "CONTRACT MISMATCH"
-	NotTested Verdict = "NOT TESTED"
+	NotTested Verdict = "NO PROOF"
 )
 
 type Result struct {

@@ -19,7 +19,7 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
 
-Every result is `PASS` / `FAIL` / or `NOT TESTED` (or the check-specific equivalent) — never a guess dressed up as an answer.
+Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer.
 
 ## Install
 
@@ -103,7 +103,7 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 ## What it can't do (yet)
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
-- Doesn't run anything live — dynamic URLs, wrapped API clients, and templated paths report `NOT TESTED`, never a guessed pass.
+- Doesn't run anything live — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass.
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
 - Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.

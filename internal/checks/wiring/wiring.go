@@ -14,10 +14,15 @@ import (
 
 type Verdict string
 
+// NotTested's display string is "NO PROOF" (renamed 2026-09-17) — a real
+// user reading a report kept reading "NOT TESTED" as "hasn't been tested
+// yet, implying a test exists," when the actual meaning is "we looked
+// and found nothing solid, so we refuse to guess." "NO PROOF" says that
+// directly instead of leaving it to be inferred.
 const (
 	Pass      Verdict = "PASS"
 	Fail      Verdict = "FAIL"
-	NotTested Verdict = "NOT TESTED"
+	NotTested Verdict = "NO PROOF"
 )
 
 type Result struct {

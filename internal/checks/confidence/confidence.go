@@ -26,10 +26,18 @@ import (
 
 type Verdict string
 
+// NotClaimed's display string is "NOT CLAIMED" (renamed 2026-09-17),
+// deliberately distinct from wiring/contract's "NO PROOF" even though
+// both used to print as the same "NOT TESTED" string — they mean
+// different things. NO PROOF means "we looked for evidence and found
+// none." NOT CLAIMED means something upstream of that: the agent never
+// said anything about this feature at all, so there's no claim here to
+// even test against the evidence. Reusing one label for both hid that
+// distinction from anyone reading the report.
 const (
 	Confirmed  Verdict = "CONFIRMED"
 	Mismatch   Verdict = "CONFIDENCE MISMATCH"
-	NotClaimed Verdict = "NOT TESTED"
+	NotClaimed Verdict = "NOT CLAIMED"
 )
 
 type Result struct {

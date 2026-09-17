@@ -48,7 +48,7 @@ func Start(root string) (State, error) {
 
 // Load reads the previously captured session state. The second return
 // value is false if no session was ever started — callers must treat
-// that as "can't run this check" (NOT TESTED), never as an empty diff.
+// that as "can't run this check" (NO PROOF), never as an empty diff.
 func Load(root string) (State, bool) {
 	raw, err := os.ReadFile(statePath(root))
 	if err != nil {
