@@ -1,0 +1,126 @@
+# malveon check
+
+Checks whether an AI coding agent's claimed-done work actually matches your plan — not by asking the agent, but by reading the real code.
+
+Mostly static analysis — no server, no browser, no deployed app, ever. The one exception: it also runs your project's own real build/lint/typecheck/test commands and reports what they actually said, not a guess. If it can't prove something, it says so instead of guessing.
+
+## The problem this solves
+
+AI coding agents say "done" confidently, whether or not it's true. A button gets built with no backend behind it. A backend gets built with nothing calling it. Two handlers silently claim the same route. The agent audits its own work in the same session it just wrote — and usually gives itself a passing grade, even when it shouldn't.
+
+`malveon check` reads the actual code and git history — and, for one check, actually runs your project's own commands — and reports ten things:
+
+- **Wiring** — does a frontend action you planned actually reach a real backend route? A miss says exactly which side is missing — backend built with no frontend, frontend built with no backend, or neither found.
+- **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
+- **Overlap** — do two or more route registrations silently claim the same method+path? Route-precedence aware: a static/dynamic split across two Next.js route files, or a static route registered before a dynamic one in the same file, is never actually ambiguous and isn't flagged — everything else, including the frameworks where registration order genuinely does create a real dead-route bug (Express, Flask, FastAPI, gorilla/mux), stays flagged. Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
+- **Frontend overlap risk** — is an `absolute` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)? `fixed` is never flagged — it always positions against the viewport — and counts as valid context for a nested `absolute` element, matching real CSS semantics.
+- **Not-in-plan** — did the agent build something this session that your plan never asked for?
+- **Hero-act** — did this session's own code introduce a known bug pattern — whether it's still sitting there right now, or got fixed along the way? Two zero-self-report signals: a git-baseline comparison (always on once a session started — catches a bug that's still live) and, if `malveon watch` was running, a captured-snapshot comparison (catches one that appeared and disappeared entirely within the session, which a single before/after diff can't see).
+- **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
+- **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
+- **Command check** — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started.
+- **Focused-test check** *(opt-in, `--focused-tests`)* — do the tests actually related to what changed this session pass, without waiting for the whole suite? Uses Jest/Vitest's own built-in `--changed` support, `pytest-picked` if you have it installed, or a coarser package-level scope for Go (clearly labeled as such). Additive evidence only — it never replaces the full test result above.
+
+Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
+
+## Install
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
+```
+
+Either one downloads the right binary for your machine, puts it on your PATH, and (macOS) clears the Gatekeeper quarantine flag so the first run doesn't get blocked. Open a new terminal afterward and run `malveon` to confirm.
+
+No Go, no toolchain, nothing else to set up — it's a single static binary either way.
+
+**Prefer to do it by hand?** Download the binary for your OS from the [Releases](../../releases) page directly, `chmod +x` it (macOS/Linux), and put it somewhere on your PATH.
+
+## Use
+
+```bash
+# once, right before you hand the agent a task
+malveon session start
+malveon watch &   # background — watches the code as the agent works, Ctrl-C when done
+
+# ... agent does its work, committing along the way like normal ...
+
+malveon check
+```
+
+That's it. `malveon check` with no flags: looks for a plan file across the whole project automatically and always confirms with you before using it (never assumes, even a clear single match — see below), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, reads known-bug-pattern findings from whatever `malveon watch` captured while it ran, and runs your project's own real build/lint/typecheck/test commands — nothing to ask the agent, nothing to paste, for any of it.
+
+`malveon watch` is optional — hero-act still works without it, using the git-baseline signal alone (catches a bad pattern that's still present right now). Running it adds a second signal: catching a bad pattern (a real, named catalog — an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) that appeared and got fixed entirely within the session, which the git comparison alone can't see. No self-report involved either way.
+
+Want to override any of the automatic behavior?
+
+```bash
+malveon check --features features.json --claimed-summary summary.txt --exec-timeout 5m
+```
+
+- `--features <path>` — skips the plan auto-detect/prompt, use this exact file.
+- `--claimed-summary <path>` — override the automatic commit-message reading with something else, for the confidence check.
+- `--skip-exec` — don't run the project's own build/lint/typecheck/test commands at all.
+- `--exec-timeout <duration>` — override the default 3-minute hard timeout per command (e.g. `5m`, `90s`).
+- `--no-gate` — still print the full report and the blocking reasons, but always exit 0.
+- `--focused-tests` — additionally run tests scoped to this session's changes (off by default; additive, never a replacement for the full test run).
+
+All optional — leave any out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
+
+## Blocking a commit
+
+By default, `malveon check` exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all (no session started, a crashed watcher, an unresolved wiring/contract/command result) — the report ends with a plain `GATE: clean` or `GATE: blocked` line naming exactly why. A `NOT IN PLAN` flag, an incompleteness marker, or a frontend-overlap-risk finding never blocks on its own — those are explicitly human-review/structural-risk signals, not proven problems.
+
+To actually block a commit on it, wire it into a pre-commit hook — malveon never installs one for you:
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit (chmod +x)
+malveon check --features path/to/your/plan.json
+```
+
+Always pass `--features` explicitly in a hook — a hook has no terminal to ask which plan file to use, and a non-interactive run without it fails fast rather than hanging. Add `--skip-exec` here if the build/lint/test commands are already run elsewhere (e.g. CI) and you only want the graph-based checks gating the commit itself.
+
+## The plan file
+
+Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename or location required (it searches the whole project tree, skipping `node_modules`/`.git`/build output). Auto-detection tries two ways:
+
+1. **By filename first** — anything containing "plan," "feature," "checklist," or "todo," with a supported extension, wherever it actually lives (`docs/PLAN.md` works fine).
+2. **By content, if nothing matched by name** — a `.json` file counts if it's actually shaped like a feature list (array of objects with a `name` field), a `.md` file counts if it has real checklist lines (`- [ ]`, `- [x]`, etc.). So `sprint3.json` or `notes.md` gets found too, not just files literally named `plan.json`.
+
+Either way, it never assumes — even one clear match gets shown to you first: `found a possible plan file (by name): docs/PLAN.md — use it? [Y/n]`. Say no and it asks for the real path instead. More than one candidate, or none at all, and it asks the same way. The only way to skip being asked is `--features <path>`.
+
+**JSON** (`.json`):
+```json
+[
+  { "id": "refund-button", "name": "refund button" }
+]
+```
+
+**Markdown checklist** (`.md`):
+```markdown
+- [ ] Refund button
+- [x] Cancel order
+```
+
+**Plain text** (`.txt`, or anything else): one feature name per line.
+
+
+## What it can't do (yet)
+
+- Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
+- No server, no browser, no deployed app, ever — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
+- A single fixed timeout applies to every command in the main command check rather than one tuned per category.
+- Focused-test mode (`--focused-tests`) only has real, built-in "changed" support for Jest and Vitest. Python needs `pytest-picked` already installed (pytest itself has no built-in equivalent), and its `--mode=branch` selection only sees a new test file once it's at least `git add`-ed — a truly untracked file won't be picked up yet. Go has no built-in mechanism at all, so it falls back to a coarser package-level scope (test the package containing a changed file, not the real transitive dependency graph).
+- Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
+- Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
+- Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
+- Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
+- Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
+- v1 language coverage: Python, TypeScript, JavaScript, Go. Recognizes both Express-style route registrations and Next.js App Router route handlers (`route.ts` files); the older Pages Router (`pages/api/*.ts`) isn't covered yet.
+
