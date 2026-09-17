@@ -29,4 +29,4 @@ if ($userPath -notlike "*$installDir*") {
 }
 
 Write-Host "Installed to $exePath"
-Write-Host "Windows may warn 'unrecognized publisher' the first time you run it (unsigned binary) - click 'More info' then 'Run anyway'."
+Write-Host "Run 'malveon' to verify (open a new terminal first if your PATH was just updated above)."
