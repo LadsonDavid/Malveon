@@ -25,66 +25,88 @@ Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalen
 
 ## Install
 
-**macOS / Linux:**
+Pick your system, copy the one line below, paste it into a terminal, and press Enter.
+
+**On a Mac or Linux:** open the Terminal app, then run:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.sh | sh
 ```
 
-**Windows (PowerShell):**
+**On Windows:** open PowerShell, then run:
 ```powershell
 irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
 ```
 
-Either one downloads the right binary for your machine, puts it on your PATH, and (macOS) clears the Gatekeeper quarantine flag so the first run doesn't get blocked. Open a new terminal afterward and run `malveon` to confirm.
+That downloads the right file for your computer and sets it up so you can just type `malveon` from any folder, from now on. On a Mac, it also clears the security warning new downloads normally get, so your first run isn't blocked.
 
-No Go, no toolchain, nothing else to set up — it's a single static binary either way.
+On Windows, you'll likely see a blue "Windows protected your PC" screen the first time you run `malveon`. That's normal for any new, unsigned program, not a sign something's wrong. Click "More info," then "Run anyway."
 
-**Prefer to do it by hand?** Download the binary for your OS from the [Releases](../../releases) page directly, `chmod +x` it (macOS/Linux), and put it somewhere on your PATH.
-
-## Use
-
+Close your terminal window and open a new one (this step matters, it's how your computer picks up the change). Then type:
 ```bash
-# once, right before you hand the agent a task
+malveon
+```
+If you see a list of commands instead of an error, it worked.
+
+Nothing else to install first. No Go, no Node, no extra toolchain. It's one file.
+
+**Prefer to do it by hand?** Download the file for your OS from the [Releases](../../releases) page. On Mac or Linux, run `chmod +x` on it (this just tells your computer the file is allowed to run), then move it into a folder already on your PATH, like `/usr/local/bin`.
+
+## How to use it
+
+Three commands. Run the first one before the agent starts, the second one while it works, and the third one after it says it's done.
+
+**1. Save a snapshot of your code, right before the agent starts:**
+```bash
 malveon session start
-malveon watch &   # background — watches the code as the agent works, Ctrl-C when done
+```
+Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against.
 
-# ... agent does its work, committing along the way like normal ...
+**2. (Optional, but worth doing) Watch your code while the agent works:**
+```bash
+malveon watch
+```
+Leave this running in its own terminal window. Press Ctrl+C to stop it once the agent is finished. Skipping this step is fine, one check (catching a bug the agent introduces and then quietly fixes) just works a little less thoroughly without it. Everything else still works.
 
+**3. After the agent says it's done, check what actually got built:**
+```bash
 malveon check
 ```
+This is the real command. It reads your plan, reads your actual code and git history, and tells you what's genuinely built versus what the agent only claims. You don't have to point it at your plan file by hand, it looks for one and asks you to confirm before using it.
 
-That's it. `malveon check` with no flags: looks for a plan file across the whole project automatically and always confirms with you before using it (never assumes, even a clear single match — see below), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, reads known-bug-pattern findings from whatever `malveon watch` captured while it ran, and runs your project's own real build/lint/typecheck/test commands — nothing to ask the agent, nothing to paste, for any of it.
+By default, this also runs your project's own build, lint, type check, and test commands for real, and it stops with an error if anything looks broken. That's the whole point, so a bad commit never has to be caught by eye. See [Blocking a commit](#blocking-a-commit) below to actually wire that up.
 
-`malveon watch` is optional — hero-act still works without it, using the git-baseline signal alone (catches a bad pattern that's still present right now). Running it adds a second signal: catching a bad pattern (a real, named catalog — an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) that appeared and got fixed entirely within the session, which the git comparison alone can't see. No self-report involved either way.
+### Changing the defaults
 
-Want to override any of the automatic behavior?
+Everything above works with no extra input. If you want more control, you can add extra options (called flags) after the command:
 
 ```bash
 malveon check --features features.json --claimed-summary summary.txt --exec-timeout 5m
 ```
 
-- `--features <path>` — skips the plan auto-detect/prompt, use this exact file.
-- `--claimed-summary <path>` — override the automatic commit-message reading with something else, for the confidence check.
-- `--skip-exec` — don't run the project's own build/lint/typecheck/test commands at all.
-- `--exec-timeout <duration>` — override the default 3-minute hard timeout per command (e.g. `5m`, `90s`).
-- `--no-gate` — still print the full report and the blocking reasons, but always exit 0.
-- `--focused-tests` — additionally run tests scoped to this session's changes (off by default; additive, never a replacement for the full test run).
+- `--features <path>`: skip the plan file question, use this exact file.
+- `--claimed-summary <path>`: use this file instead of git commit messages, for the confidence check.
+- `--skip-exec`: don't run your build/lint/test commands at all.
+- `--exec-timeout <duration>`: change how long each command gets before malveon gives up on it (default 3 minutes). Example: `5m`, `90s`.
+- `--no-gate`: still show the full report, but always finish successfully, even if something's wrong.
+- `--focused-tests`: also run just the tests related to what changed this session, on top of the full test run.
 
-All optional — leave any out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
+Skip any flag you don't need. Nothing breaks, that part of the report just explains it was skipped and why.
 
 ## Blocking a commit
 
-By default, `malveon check` exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all (no session started, a crashed watcher, an unresolved wiring/contract/command result) — the report ends with a plain `GATE: clean` or `GATE: blocked` line naming exactly why. A `NOT IN PLAN` flag, an incompleteness marker, or a frontend-overlap-risk finding never blocks on its own — those are explicitly human-review/structural-risk signals, not proven problems.
+By default, `malveon check` fails (technically: exits with a non-zero status) if it finds something broken, something it can't prove either way, or a check that couldn't run at all. Every report ends with a plain `GATE: clean` or `GATE: blocked` line, naming exactly why.
 
-To actually block a commit on it, wire it into a pre-commit hook — malveon never installs one for you:
+A few things never block on their own: code flagged as "not in your plan," unfinished-code markers, and frontend layout risks. Those are meant for a human to glance at, not proof of a real bug.
+
+To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon never sets this up for you, here's how to do it yourself:
 
 ```bash
 #!/bin/sh
-# .git/hooks/pre-commit (chmod +x)
+# save as .git/hooks/pre-commit, then run: chmod +x .git/hooks/pre-commit
 malveon check --features path/to/your/plan.json
 ```
 
-Always pass `--features` explicitly in a hook — a hook has no terminal to ask which plan file to use, and a non-interactive run without it fails fast rather than hanging. Add `--skip-exec` here if the build/lint/test commands are already run elsewhere (e.g. CI) and you only want the graph-based checks gating the commit itself.
+Always include `--features` in a hook like this. A hook can't ask you questions interactively, so without it, the check fails right away instead of hanging while it waits for an answer. If your build and test commands already run somewhere else, like CI, add `--skip-exec` here so this hook only checks the code itself.
 
 ## The plan file
 
