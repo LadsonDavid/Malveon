@@ -10,7 +10,9 @@ Reply in plain English. This repo is going to be shared with a real outside test
 
 A small, standalone CLI tool called `malveon check`, written in Go. It checks whether an AI coding agent's claimed-done work actually matches a plan — not by asking the agent, but by reading the real code.
 
-This is **not** part of the Malveon monorepo and must never depend on it. A stranger should be able to clone this repo alone and run it, without touching anything else. Nothing from Malveon's internal apps, business logic, or credentials gets copied in here.
+This is **not** part of the Malveon monorepo and must never depend on it. Nothing from Malveon's internal apps, business logic, or credentials gets copied in here.
+
+**Two-repo split (added 2026-09-17), same pattern `anthropics/claude-code` uses.** This repo (`LadsonDavid/beta-test`, private) holds the actual implementation — everything a stranger should never need to see. A separate public repo, `LadsonDavid/Malveon`, is the only thing an actual tester ever touches: `README.md`, `install.sh`, `install.ps1`, and the GitHub Release with the 4 compiled binaries — no `.go` source, no `CLAUDE.md`, no `progress.md`. A public repo's release page auto-generates a "Source code (zip/tar.gz)" link for every tag with no way to opt out; splitting the repos means that auto-generated zip only ever contains those 3 harmless files, verified directly by downloading it. `README.md`/`install.sh`/`install.ps1` exist in *both* repos (kept in sync by hand when either changes) — this one as the working copy to edit, the public one as the copy that's actually live. A stranger installs from the public repo only; they never clone this one.
 
 **Why this exists:** built in response to a real, confirmed pain point from a week of customer discovery on Reddit (r/cursor, r/AI_Agents, r/AgentsOfAI, r/SaaS). Full background is in `D:\Customer talk\session-context-full.md` if more context is ever needed — this file only has what's needed to actually build v1.
 

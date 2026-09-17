@@ -1,10 +1,10 @@
 # Installs the malveon binary for Windows: downloads the release exe,
 # places it in %LOCALAPPDATA%\malveon, and adds that folder to the
 # user's PATH (no admin rights needed). Run via:
-#   irm https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 
-$repo = "LadsonDavid/beta-test"
+$repo = "LadsonDavid/Malveon"
 $installDir = "$env:LOCALAPPDATA\malveon"
 $exePath = "$installDir\malveon.exe"
 $url = "https://github.com/$repo/releases/latest/download/malveon-windows-amd64.exe"

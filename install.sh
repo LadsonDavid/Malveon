@@ -3,10 +3,10 @@
 # the matching release asset, makes it executable, places it on PATH,
 # and (macOS) clears the Gatekeeper quarantine flag so the first run
 # doesn't get blocked. Run via:
-#   curl -fsSL https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.sh | sh
 set -e
 
-REPO="LadsonDavid/beta-test"
+REPO="LadsonDavid/Malveon"
 INSTALL_DIR="${MALVEON_INSTALL_DIR:-/usr/local/bin}"
 
 os=$(uname -s)

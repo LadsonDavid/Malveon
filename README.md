@@ -27,12 +27,12 @@ Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalen
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.sh | sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/LadsonDavid/beta-test/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
 ```
 
 Either one downloads the right binary for your machine, puts it on your PATH, and (macOS) clears the Gatekeeper quarantine flag so the first run doesn't get blocked. Open a new terminal afterward and run `malveon` to confirm.
