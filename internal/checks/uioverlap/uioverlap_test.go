@@ -64,7 +64,11 @@ export function Dynamic({cls}) {
 	}
 }
 
-func TestRunFixedAlsoFlagged(t *testing.T) {
+// TestRunFixedNeverFlagged covers a real false positive found by reading
+// a real project (admin/layout.tsx): a "fixed" element always positions
+// against the viewport, so unlike "absolute" it never needs a
+// relative/sticky ancestor to avoid escaping.
+func TestRunFixedNeverFlagged(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "Header.jsx", `
 function Header() {
@@ -75,8 +79,52 @@ function Header() {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (fixed never needs a positioning-context ancestor), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunAbsoluteInsideFixedHasContext covers the other half of the same
+// real false positive (Modal.tsx): a "fixed inset-0" wrapper around an
+// "absolute inset-0" backdrop is a standard modal pattern. CSS gives a
+// fixed element its own containing block, so the nested absolute child
+// is correctly positioned, not escaping.
+func TestRunAbsoluteInsideFixedHasContext(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Modal.tsx", `
+export function Modal() {
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/80" />
+    </div>
+  );
+}
+`)
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (fixed ancestor is valid context for a nested absolute), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunAbsoluteStillFlaggedWithoutFixedOrRelative is regression
+// protection: removing "fixed" from escapingClasses must not weaken the
+// real absolute-with-no-context case this check still needs to catch.
+func TestRunAbsoluteStillFlaggedWithoutFixedOrRelative(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "Badge.tsx", `
+export function Badge() {
+  return <span className="absolute top-0 right-0">3</span>;
+}
+`)
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
 	if len(findings) != 1 {
-		t.Fatalf("expected 1 finding for a fixed element with no context, got %d: %+v", len(findings), findings)
+		t.Fatalf("expected 1 finding (absolute with no relative/sticky/fixed anywhere in file), got %d: %+v", len(findings), findings)
 	}
 }
 
@@ -146,5 +194,49 @@ func TestRunPlainCSSNestedContextNotMissed(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Fatalf("expected 0 findings (.card's relative should suppress .badge's absolute despite nesting), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunPlainCSSFixedNeverFlagged is the plain-CSS equivalent of
+// TestRunFixedNeverFlagged: position: fixed always resolves against the
+// viewport, so it's never flagged even with no relative/sticky anywhere.
+func TestRunPlainCSSFixedNeverFlagged(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "navbar.css", `
+.navbar {
+  position: fixed;
+  top: 0;
+}
+`)
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (position: fixed never needs a positioning-context ancestor), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunPlainCSSAbsoluteWithFixedContext is the plain-CSS equivalent of
+// TestRunAbsoluteInsideFixedHasContext: position: fixed anywhere in the
+// file counts as valid context for a position: absolute declaration.
+func TestRunPlainCSSAbsoluteWithFixedContext(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "modal.css", `
+.overlay {
+  position: fixed;
+  inset: 0;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+}
+`)
+	findings, err := Run(dir)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (position: fixed elsewhere in the file is valid context), got %d: %+v", len(findings), findings)
 	}
 }

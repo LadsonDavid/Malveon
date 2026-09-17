@@ -95,3 +95,51 @@ func writeFile(t *testing.T, dir, name, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestRunSuppressesNextJSStaticDynamicPair covers the real false
+// positive a reviewer found: /api/circles/mine (static) and
+// /api/circles/[id] (dynamic) in two separate route.ts files never
+// actually collide in Next.js App Router — static always wins,
+// deterministically, regardless of file order.
+func TestRunSuppressesNextJSStaticDynamicPair(t *testing.T) {
+	dir := t.TempDir()
+	g := &graph.Graph{Nodes: []graph.Node{
+		{Kind: graph.RouteHandler, File: "src/app/api/circles/[id]/route.ts", Line: 3, Method: "GET", Path: "/api/circles/:id", Confidence: graph.Extracted},
+		{Kind: graph.RouteHandler, File: "src/app/api/circles/mine/route.ts", Line: 3, Method: "GET", Path: "/api/circles/mine", Confidence: graph.Extracted},
+	}}
+	findings := Run(g, dir)
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (Next.js static/dynamic split is never ambiguous), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunSuppressesSameFileStaticFirst covers the one ordering that's
+// safe under every researched router, order-dependent or not: a static
+// route registered before a dynamic one in the same file.
+func TestRunSuppressesSameFileStaticFirst(t *testing.T) {
+	dir := t.TempDir()
+	g := &graph.Graph{Nodes: []graph.Node{
+		{Kind: graph.RouteHandler, File: "routes.js", Line: 5, Method: "GET", Path: "/users/me", Confidence: graph.Extracted},
+		{Kind: graph.RouteHandler, File: "routes.js", Line: 12, Method: "GET", Path: "/users/:id", Confidence: graph.Extracted},
+	}}
+	findings := Run(g, dir)
+	if len(findings) != 0 {
+		t.Fatalf("expected 0 findings (static registered before dynamic, safe under every researched router), got %d: %+v", len(findings), findings)
+	}
+}
+
+// TestRunKeepsFlaggingSameFileDynamicFirst covers the one ordering that
+// IS a real, confirmed bug under order-dependent routers (Express,
+// Flask, FastAPI, gorilla/mux): a dynamic route registered before the
+// static one it would otherwise swallow.
+func TestRunKeepsFlaggingSameFileDynamicFirst(t *testing.T) {
+	dir := t.TempDir()
+	g := &graph.Graph{Nodes: []graph.Node{
+		{Kind: graph.RouteHandler, File: "routes.js", Line: 5, Method: "GET", Path: "/users/:id", Confidence: graph.Extracted},
+		{Kind: graph.RouteHandler, File: "routes.js", Line: 12, Method: "GET", Path: "/users/me", Confidence: graph.Extracted},
+	}}
+	findings := Run(g, dir)
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding (dynamic route registered first genuinely swallows the static one under order-dependent routers), got %d: %+v", len(findings), findings)
+	}
+}

@@ -57,8 +57,8 @@ func TestIsNextRouteFile(t *testing.T) {
 		"src/lib/routes.ts":          false,
 	}
 	for file, want := range cases {
-		if got := isNextRouteFile(file); got != want {
-			t.Errorf("isNextRouteFile(%q) = %v, want %v", file, got, want)
+		if got := IsNextRouteFile(file); got != want {
+			t.Errorf("IsNextRouteFile(%q) = %v, want %v", file, got, want)
 		}
 	}
 }

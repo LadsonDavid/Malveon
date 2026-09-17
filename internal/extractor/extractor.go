@@ -47,7 +47,7 @@ func Extract(root string) (*graph.Graph, error) {
 		switch ext {
 		case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
 			sites = scanJSLike(src)
-			if isNextRouteFile(rel) {
+			if IsNextRouteFile(rel) {
 				sites = append(sites, scanNextRouteHandlers(rel, src)...)
 			}
 		case ".py":

@@ -28,10 +28,10 @@ var (
 	nextExportedConstMethodPattern = regexp.MustCompile(`export\s+const\s+(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*[:=]`)
 )
 
-// isNextRouteFile reports whether relFile is a Next.js App Router route
+// IsNextRouteFile reports whether relFile is a Next.js App Router route
 // handler file, by its reserved filename — a strong, deliberate
 // convention Next.js itself requires, not a heuristic guess.
-func isNextRouteFile(relFile string) bool {
+func IsNextRouteFile(relFile string) bool {
 	return nextRouteFilePattern.MatchString(filepath.Base(relFile))
 }
 

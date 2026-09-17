@@ -229,7 +229,7 @@ func PathsMatch(callPath, routePath string) bool {
 		return false
 	}
 	for i := range a {
-		if isWildcardSegment(b[i]) || isWildcardSegment(a[i]) {
+		if IsWildcardSegment(b[i]) || IsWildcardSegment(a[i]) {
 			continue
 		}
 		if a[i] != b[i] {
@@ -247,7 +247,7 @@ func splitPath(p string) []string {
 	return strings.Split(p, "/")
 }
 
-func isWildcardSegment(seg string) bool {
+func IsWildcardSegment(seg string) bool {
 	if seg == "" {
 		return false
 	}
@@ -258,4 +258,18 @@ func isWildcardSegment(seg string) bool {
 		return true
 	}
 	return false
+}
+
+// IsFullyStatic reports whether path has no wildcard segments at all —
+// used by the overlap check to tell a genuinely static route ("/users/
+// mine") apart from a parameterized one ("/users/:id") that happens to
+// match it, since several routers (see internal/checks/overlap's
+// reachability/ordering notes) resolve the two very differently.
+func IsFullyStatic(path string) bool {
+	for _, seg := range splitPath(path) {
+		if IsWildcardSegment(seg) {
+			return false
+		}
+	}
+	return true
 }

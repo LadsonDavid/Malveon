@@ -7,13 +7,23 @@
 // reasoning behind why this stays structural-risk-only in v1.
 //
 // v1 scope, "Tailwind first" (confirmed 2026-09-16): scan JSX/TSX/HTML
-// for elements using Tailwind's `absolute`/`fixed` utility classes, and
-// flag a file where NONE of its elements anywhere establish a
-// positioning context (`relative`/`absolute`/`fixed`/`sticky`). An
-// absolutely/fixed-positioned element with no positioning context
-// anywhere in the same file will position against the page itself
-// instead of its intended container — a well-known, common real bug,
-// not a guess.
+// for elements using Tailwind's `absolute` utility class, and flag a
+// file where NONE of its elements anywhere establish a positioning
+// context (`relative`/`sticky`/`fixed`). An absolutely-positioned
+// element with no positioning context anywhere in the same file will
+// position against the page itself instead of its intended container —
+// a well-known, common real bug, not a guess.
+//
+// `fixed` is deliberately NOT something this check flags (fixed 2026-09-17,
+// a real false positive found by reading a real project's Modal.tsx and
+// admin/layout.tsx): a `fixed` element always positions against the
+// viewport — it never needs an ancestor to anchor to, the same way
+// `absolute` does. It IS still counted as valid positioning context
+// *for a nested absolute descendant*, since CSS gives any non-static
+// positioned element (relative/sticky/fixed, same as absolute) its own
+// containing block — a `<div className="fixed inset-0">` wrapping
+// `<div className="absolute inset-0">` is a standard, correct modal
+// pattern, not a bug.
 //
 // Stated limitation: file-scoped, not ancestor-precise. This does not
 // trace the actual JSX parent chain (that needs real tag-tree parsing,
@@ -24,8 +34,8 @@
 // correct about what it does check, not a hidden gap.
 // Plain-CSS files (.css/.scss/.less) get the same file-scoped heuristic,
 // applied to the actual `position:` declaration instead of a utility
-// class name: a file with position: absolute/fixed anywhere and no
-// position: relative/sticky anywhere is flagged. Context detection
+// class name: a file with position: absolute anywhere and no
+// position: relative/sticky/fixed anywhere is flagged. Context detection
 // deliberately scans the whole file as flat text rather than trying to
 // pair each declaration with its enclosing selector via brace-matching —
 // real CSS/SCSS nesting (a parent selector's own `relative` inside a
@@ -55,21 +65,36 @@ type Finding struct {
 
 var classAttrPattern = regexp.MustCompile(`(?:class|className)\s*=\s*"([^"]*)"`)
 
-// positioningContextClasses are classes that count as a real, deliberate
-// containment anchor. Deliberately excludes "absolute"/"fixed" — an
-// escaping element sitting near another escaping element isn't a fix,
-// it's the same problem twice.
+// positioningContextClasses are classes that establish a valid CSS
+// containing block for a nested absolutely-positioned descendant.
+// Includes "fixed": per the CSS spec, any non-static position
+// (relative/sticky/fixed, same as absolute) gives an element its own
+// containing block — a "fixed inset-0" wrapper around an "absolute
+// inset-0" child is a standard, correct pattern, not a bug. Deliberately
+// excludes "absolute" itself: this check is file-scoped, not
+// ancestor-precise (see package doc comment), so counting absolute as
+// its own context would let one absolute element anywhere in the file
+// silence every other absolute element's real missing-context bug.
 var positioningContextClasses = map[string]bool{
-	"relative": true, "sticky": true,
+	"relative": true, "sticky": true, "fixed": true,
 }
+
+// escapingClasses are classes that need a positioning-context ancestor
+// to avoid escaping their intended container. Deliberately excludes
+// "fixed": a fixed element always positions against the viewport, so it
+// never needs one (the transform/filter/perspective containing-block
+// edge case is out of scope for this file-scoped heuristic — confirmed
+// as a real false positive 2026-09-17 by reading a real project's
+// Modal.tsx and admin/layout.tsx, both flagging standard "fixed inset-0"
+// patterns that were never actually broken).
 var escapingClasses = map[string]bool{
-	"absolute": true, "fixed": true,
+	"absolute": true,
 }
 
 var cssPositionDeclPattern = regexp.MustCompile(`(?i)position\s*:\s*(absolute|fixed|relative|sticky)\b`)
 
 // Run scans every JSX/TSX/HTML file under root and returns one finding
-// per file that has an absolute/fixed element but no positioning context
+// per file that has an absolute element but no positioning context
 // anywhere in the same file.
 func Run(root string) ([]Finding, error) {
 	var findings []Finding
@@ -157,17 +182,19 @@ func scanFile(file, src string) []Finding {
 			File:    file,
 			Line:    c.line,
 			Classes: c.classes,
-			Reason:  "positioned element (absolute/fixed) with no positioning context (relative/absolute/fixed/sticky) found anywhere in this file — likely escapes its intended container",
+			Reason:  "absolutely-positioned element with no positioning context (relative/sticky/fixed) found anywhere in this file — likely escapes its intended container",
 		})
 	}
 	return findings
 }
 
-// scanCSSFile flags every position: absolute/fixed declaration in a
-// plain CSS/SCSS/LESS file that has no position: relative/sticky
-// declaration anywhere in the same file. See the package doc comment
-// for why context detection deliberately doesn't try to pair a
-// declaration with its enclosing selector.
+// scanCSSFile flags every position: absolute declaration in a plain
+// CSS/SCSS/LESS file that has no position: relative/sticky/fixed
+// declaration anywhere in the same file. position: fixed is never
+// flagged (always resolves against the viewport) but does count as
+// valid context for a nested absolute — see the package doc comment for
+// both that reasoning and why context detection deliberately doesn't
+// try to pair a declaration with its enclosing selector.
 func scanCSSFile(file, src string) []Finding {
 	matches := cssPositionDeclPattern.FindAllStringSubmatchIndex(src, -1)
 	if len(matches) == 0 {
@@ -178,7 +205,7 @@ func scanCSSFile(file, src string) []Finding {
 	var candidateOffsets []int
 	for _, m := range matches {
 		value := strings.ToLower(src[m[2]:m[3]])
-		if value == "relative" || value == "sticky" {
+		if value == "relative" || value == "sticky" || value == "fixed" {
 			hasContext = true
 			continue
 		}
@@ -194,8 +221,8 @@ func scanCSSFile(file, src string) []Finding {
 		findings = append(findings, Finding{
 			File:    file,
 			Line:    lineOf(src, offset),
-			Classes: "position: absolute/fixed",
-			Reason:  "plain CSS declares position: absolute/fixed with no position: relative/sticky found anywhere in this file — likely escapes its intended container",
+			Classes: "position: absolute",
+			Reason:  "plain CSS declares position: absolute with no position: relative/sticky/fixed found anywhere in this file — likely escapes its intended container",
 		})
 	}
 	return findings
