@@ -39,6 +39,11 @@ const (
 	Lint      Category = "lint"
 	Typecheck Category = "typecheck"
 	Test      Category = "test"
+
+	// FocusedTest is the opt-in, additive category from RunFocused (see
+	// focused.go) — never part of Run/categoryOrder above. It's evidence
+	// on top of Test's full-suite result, never a substitute for it.
+	FocusedTest Category = "focused test"
 )
 
 // categoryOrder fixes the run order: Build first because Typecheck (for a

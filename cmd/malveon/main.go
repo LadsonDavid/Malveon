@@ -55,7 +55,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    Run this in the background before the agent's task begins, so the")
 	fmt.Fprintln(os.Stderr, "    hero-act check has real history to check — no self-report needed. Ctrl-C to stop.")
 	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--claimed-summary <path>]")
-	fmt.Fprintln(os.Stderr, "                [--skip-exec] [--exec-timeout <duration>] [--no-gate]")
+	fmt.Fprintln(os.Stderr, "                [--skip-exec] [--exec-timeout <duration>] [--no-gate] [--focused-tests]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
 	fmt.Fprintln(os.Stderr, "    --claimed-summary can be omitted too: the confidence check reads commit")
@@ -65,6 +65,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    and exits non-zero if anything failed, couldn't be resolved, or a check couldn't")
 	fmt.Fprintln(os.Stderr, "    run at all — so a git pre-commit hook can block on it. --skip-exec disables the")
 	fmt.Fprintln(os.Stderr, "    command runs; --no-gate keeps the report but always exits 0.")
+	fmt.Fprintln(os.Stderr, "    --focused-tests additionally runs tests scoped to this session's changes (Jest/Vitest's")
+	fmt.Fprintln(os.Stderr, "    own --changed support, pytest-picked if installed, or Go at package granularity) —")
+	fmt.Fprintln(os.Stderr, "    off by default, additive evidence only, never a substitute for the full test result.")
 }
 
 func runSession(args []string) {
@@ -108,6 +111,7 @@ func runCheck(args []string) {
 	skipExec := fset.Bool("skip-exec", false, "skip running the project's own build/lint/typecheck/test commands")
 	execTimeout := fset.Duration("exec-timeout", commands.DefaultTimeout, "hard per-command timeout for the build/lint/typecheck/test check")
 	noGate := fset.Bool("no-gate", false, "still print the full report, but always exit 0 regardless of what was found")
+	focusedTests := fset.Bool("focused-tests", false, "additionally run tests scoped to what changed this session (Jest/Vitest --changed, pytest-picked, or Go package-level) — additive only, never replaces the full test result; requires a session start")
 	fset.Parse(args)
 
 	if *featuresPath == "" {
@@ -177,6 +181,15 @@ func runCheck(args []string) {
 		commandResults = commands.Run(*root, *execTimeout)
 	}
 
+	// Opt-in only (--focused-tests) — additive evidence on top of the
+	// full test result above, never a substitute for it. See CLAUDE.md
+	// 3.2.11's focused-test note for why this stays opt-in rather than
+	// the default.
+	var focusedReport commands.FocusedReport
+	if *focusedTests {
+		focusedReport = commands.RunFocused(*root, *execTimeout)
+	}
+
 	// Each section is rendered into its own buffer so the overview (which
 	// needs every section's summary) can print first, before any of the
 	// detail it summarizes — see internal/report's package doc comment.
@@ -197,6 +210,9 @@ func runCheck(args []string) {
 	render(func(w io.Writer) report.CheckSummary { return report.WriteIncompleteness(w, incompletenessReport) })
 	render(func(w io.Writer) report.CheckSummary { return report.WriteConfidence(w, confidenceReport) })
 	render(func(w io.Writer) report.CheckSummary { return report.WriteCommands(w, commandResults, *skipExec) })
+	if *focusedTests {
+		render(func(w io.Writer) report.CheckSummary { return report.WriteFocusedTests(w, focusedReport) })
+	}
 
 	report.WriteOverview(os.Stdout, summaries)
 	for _, s := range sections {
@@ -212,6 +228,9 @@ func runCheck(args []string) {
 		Confidence:      confidenceReport,
 		Commands:        commandResults,
 		CommandsSkipped: *skipExec,
+
+		FocusedTests:          focusedReport,
+		FocusedTestsRequested: *focusedTests,
 	})
 	if !decision.Blocked {
 		fmt.Println("GATE: clean — nothing here blocks a commit")

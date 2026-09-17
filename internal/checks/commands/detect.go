@@ -186,10 +186,11 @@ func noCommandReason(dir toolchainDir, cat Category) string {
 
 var makeTargetPattern = regexp.MustCompile(`(?m)^([A-Za-z0-9_.-]+)\s*:[^=]`)
 
-// makefileTargets reports which of build/lint/typecheck/test the
-// Makefile in dir actually declares as a target — never a guess at what
-// a target named something else might do.
-func makefileTargets(dir string) map[Category]string {
+// rawMakefileTargetNames reports every target name declared in dir's
+// Makefile, with no interpretation of what any of them do — shared by
+// makefileTargets (build/lint/typecheck/test) and focusedMakefileTarget
+// (the focused-test names), so both read the exact same real targets.
+func rawMakefileTargetNames(dir string) map[string]bool {
 	names := map[string]bool{}
 	for _, fname := range []string{"Makefile", "makefile", "GNUmakefile"} {
 		raw, err := os.ReadFile(filepath.Join(dir, fname))
@@ -201,7 +202,14 @@ func makefileTargets(dir string) map[Category]string {
 		}
 		break // only one of these three actually exists in a given directory
 	}
+	return names
+}
 
+// makefileTargets reports which of build/lint/typecheck/test the
+// Makefile in dir actually declares as a target — never a guess at what
+// a target named something else might do.
+func makefileTargets(dir string) map[Category]string {
+	names := rawMakefileTargetNames(dir)
 	out := map[Category]string{}
 	if names["build"] {
 		out[Build] = "build"

@@ -19,6 +19,7 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
 - **Command check** — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started.
+- **Focused-test check** *(opt-in, `--focused-tests`)* — do the tests actually related to what changed this session pass, without waiting for the whole suite? Uses Jest/Vitest's own built-in `--changed` support, `pytest-picked` if you have it installed, or a coarser package-level scope for Go (clearly labeled as such). Additive evidence only — it never replaces the full test result above.
 
 Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
 
@@ -67,6 +68,7 @@ malveon check --features features.json --claimed-summary summary.txt --exec-time
 - `--skip-exec` — don't run the project's own build/lint/typecheck/test commands at all.
 - `--exec-timeout <duration>` — override the default 3-minute hard timeout per command (e.g. `5m`, `90s`).
 - `--no-gate` — still print the full report and the blocking reasons, but always exit 0.
+- `--focused-tests` — additionally run tests scoped to this session's changes (off by default; additive, never a replacement for the full test run).
 
 All optional — leave any out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
 
@@ -122,7 +124,8 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
 - No server, no browser, no deployed app, ever — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
-- The command check runs your project's *whole* defined test command, not just tests relevant to what changed ("focused" tests) — no test-selection logic, on purpose, since a wrong selection could hide a real regression. A single fixed timeout applies to every command rather than one tuned per category.
+- A single fixed timeout applies to every command in the main command check rather than one tuned per category.
+- Focused-test mode (`--focused-tests`) only has real, built-in "changed" support for Jest and Vitest. Python needs `pytest-picked` already installed (pytest itself has no built-in equivalent), and its `--mode=branch` selection only sees a new test file once it's at least `git add`-ed — a truly untracked file won't be picked up yet. Go has no built-in mechanism at all, so it falls back to a coarser package-level scope (test the package containing a changed file, not the real transitive dependency graph).
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
 - Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.

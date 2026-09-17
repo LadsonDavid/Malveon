@@ -119,6 +119,37 @@ func TestWriteCommandsGroupsNoProofByReason(t *testing.T) {
 	}
 }
 
+// TestWriteFocusedTestsUnavailableIsSkipped proves the opt-in check's
+// "asked for it, involuntarily didn't get it" state renders distinctly
+// from a normal empty/clean result, the same SKIPPED convention every
+// other session-scoped check in this tool already uses.
+func TestWriteFocusedTestsUnavailableIsSkipped(t *testing.T) {
+	var buf bytes.Buffer
+	summary := WriteFocusedTests(&buf, commands.FocusedReport{Available: false, Reason: "no session start recorded"})
+	if summary.Line != "SKIPPED" {
+		t.Errorf("unexpected summary line: %q", summary.Line)
+	}
+	if !strings.Contains(buf.String(), "no session start recorded") {
+		t.Errorf("expected the reason printed, got:\n%s", buf.String())
+	}
+}
+
+func TestWriteFocusedTestsBucketsFailFirst(t *testing.T) {
+	results := []commands.Result{
+		{Category: commands.FocusedTest, Stack: "Go (package-level, not dependency-graph-aware)", Dir: ".", Verdict: commands.Fail, Reason: "boom", Output: "assertion failed"},
+		{Category: commands.FocusedTest, Stack: "Node (Jest, --changedSince)", Dir: "frontend", Verdict: commands.Pass, Command: "jest --changedSince abc"},
+	}
+	var buf bytes.Buffer
+	summary := WriteFocusedTests(&buf, commands.FocusedReport{Available: true, Results: results})
+	out := buf.String()
+	if !strings.Contains(out, "assertion failed") {
+		t.Errorf("expected the FAIL row's output shown, got:\n%s", out)
+	}
+	if summary.Line != "1 PASS · 1 FAIL · 0 NO PROOF" {
+		t.Errorf("unexpected summary line: %q", summary.Line)
+	}
+}
+
 func TestWriteOverviewPrintsEveryLabel(t *testing.T) {
 	var buf bytes.Buffer
 	WriteOverview(&buf, []CheckSummary{

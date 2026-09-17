@@ -495,6 +495,81 @@ func WriteCommands(w io.Writer, results []commands.Result, skipped bool) CheckSu
 	}
 }
 
+// WriteFocusedTests renders the opt-in --focused-tests result. Only
+// called from cmd/malveon/main.go when the flag was actually passed —
+// unlike WriteCommands, there's no "not requested" state to render here,
+// since the section simply doesn't appear at all when it wasn't asked
+// for (see the flag's own doc comment in main.go).
+func WriteFocusedTests(w io.Writer, report commands.FocusedReport) CheckSummary {
+	fmt.Fprintln(w, "Tests for what changed, fast (focused-test check)")
+	fmt.Fprintln(w, "do the tests actually related to this session's changes pass? Additive evidence only —")
+	fmt.Fprintln(w, "never a substitute for the full test result above. Only uses a project's own real test-runner")
+	fmt.Fprintln(w, "support (Jest/Vitest's built-in --changed, or pytest-picked if installed); Go falls back to a")
+	fmt.Fprintln(w, "coarser package-level heuristic since no such built-in mechanism exists for it.")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+
+	if !report.Available {
+		fmt.Fprintf(w, "SKIPPED: %s\n\n", report.Reason)
+		return CheckSummary{Label: "Tests for what changed, fast", Line: "SKIPPED"}
+	}
+	if len(report.Results) == 0 {
+		fmt.Fprintln(w, "nothing to run — no toolchain directory found anywhere in the project")
+		fmt.Fprintln(w)
+		return CheckSummary{Label: "Tests for what changed, fast", Line: "no toolchain found"}
+	}
+
+	var fails, passes, noProof []commands.Result
+	for _, r := range report.Results {
+		switch r.Verdict {
+		case commands.Fail:
+			fails = append(fails, r)
+		case commands.Pass:
+			passes = append(passes, r)
+		default:
+			noProof = append(noProof, r)
+		}
+	}
+
+	if len(fails) > 0 {
+		fmt.Fprintf(w, "FAIL (%d) — a test related to this session's changes actually failed just now\n", len(fails))
+		for _, r := range fails {
+			fmt.Fprintf(w, "  %s\n", commandLabel(r))
+			fmt.Fprintf(w, "    command: %s\n", r.Command)
+			fmt.Fprintf(w, "    %s\n", r.Reason)
+			for _, line := range lastLines(r.Output, 20) {
+				fmt.Fprintf(w, "      %s\n", line)
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	if len(passes) > 0 {
+		fmt.Fprintf(w, "PASS (%d) — ran clean\n", len(passes))
+		for _, r := range passes {
+			fmt.Fprintf(w, "  %s — %s (%s)\n", commandLabel(r), r.Command, r.Duration.Round(time.Millisecond))
+		}
+		fmt.Fprintln(w)
+	}
+
+	if len(noProof) > 0 {
+		fmt.Fprintf(w, "NO PROOF (%d) — couldn't scope a focused run here, grouped by why\n", len(noProof))
+		order, groups := groupByKey(noProof, func(r commands.Result) string { return r.Reason })
+		for _, reason := range order {
+			items := groups[reason]
+			fmt.Fprintf(w, "  %s (%d)\n", reason, len(items))
+			for _, r := range items {
+				fmt.Fprintf(w, "    - %s\n", commandLabel(r))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	return CheckSummary{
+		Label: "Tests for what changed, fast",
+		Line:  fmt.Sprintf("%d PASS · %d FAIL · %d NO PROOF", len(passes), len(fails), len(noProof)),
+	}
+}
+
 func commandLabel(r commands.Result) string {
 	where := r.Dir
 	if where == "." {

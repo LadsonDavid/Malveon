@@ -26,6 +26,14 @@
 //     deliberate opt-out by the tester is not an involuntary "couldn't
 //     run" the way a missing session is for the other session-scoped
 //     checks; blocking on it would defeat the flag's own purpose.
+//   - a NO PROOF from focused-test mode (--focused-tests) — it's an
+//     opt-in, best-effort, additive signal on top of the already-
+//     blocking full test result, not a second "prove it or refuse"
+//     category. A real FAIL from it still blocks (real evidence is real
+//     evidence regardless of how narrowly it was found); focused-test
+//     mode being entirely unavailable when it was explicitly requested
+//     does block, the same "asked for it, involuntarily didn't get it"
+//     reasoning as every other SKIPPED check above.
 package gate
 
 import (
@@ -57,6 +65,15 @@ type Input struct {
 	// passed --skip-exec).
 	Commands        []commands.Result
 	CommandsSkipped bool
+
+	// FocusedTests is only evaluated when FocusedTestsRequested is true
+	// (the tester passed --focused-tests) — an opt-in feature that was
+	// never asked for must never block on its own absence, same
+	// reasoning as CommandsSkipped above but inverted: here, asking for
+	// it and not getting a usable result IS the involuntary "couldn't
+	// run" case.
+	FocusedTests          commands.FocusedReport
+	FocusedTestsRequested bool
 }
 
 // Decision is whether malveon check should exit non-zero, and why, in
@@ -100,6 +117,20 @@ func Evaluate(in Input) Decision {
 	if !in.CommandsSkipped {
 		if fail, noProof := countCommands(in.Commands); fail+noProof > 0 {
 			reasons = append(reasons, fmt.Sprintf("build/lint/test actually ran: %d FAIL, %d NO PROOF", fail, noProof))
+		}
+	}
+
+	if in.FocusedTestsRequested {
+		if !in.FocusedTests.Available {
+			reasons = append(reasons, "focused tests couldn't run: "+in.FocusedTests.Reason)
+		} else if fail := countFocusedFail(in.FocusedTests.Results); fail > 0 {
+			// NO PROOF from focused tests deliberately never blocks here —
+			// it's a best-effort, additive bonus signal on top of the
+			// already-blocking full test result, not a second "prove it
+			// or refuse" category of its own. A real FAIL is real
+			// evidence regardless of how narrowly it was found, so that
+			// still blocks.
+			reasons = append(reasons, fmt.Sprintf("focused tests: %d FAIL", fail))
 		}
 	}
 
@@ -164,4 +195,14 @@ func countCommands(results []commands.Result) (fail, noProof int) {
 		}
 	}
 	return
+}
+
+func countFocusedFail(results []commands.Result) int {
+	n := 0
+	for _, r := range results {
+		if r.Verdict == commands.Fail {
+			n++
+		}
+	}
+	return n
 }

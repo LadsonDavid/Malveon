@@ -156,6 +156,44 @@ func TestEvaluate_CommandsNoProofBlocks(t *testing.T) {
 	}
 }
 
+func TestEvaluate_FocusedTestsNotRequestedNeverBlocks(t *testing.T) {
+	in := cleanInput()
+	// Not requested at all — the zero-value FocusedReport is
+	// {Available: false}, which would look like a SKIPPED check if
+	// FocusedTestsRequested weren't gating it.
+	d := Evaluate(in)
+	if d.Blocked {
+		t.Fatalf("focused tests never requested should never block, got: %v", d.Reasons)
+	}
+}
+
+func TestEvaluate_FocusedTestsUnavailableWhenRequestedBlocks(t *testing.T) {
+	in := cleanInput()
+	in.FocusedTestsRequested = true
+	in.FocusedTests = commands.FocusedReport{Available: false, Reason: "no session start recorded"}
+	d := Evaluate(in)
+	if !d.Blocked {
+		t.Fatal("explicitly requesting --focused-tests and getting nothing should block, same as any other SKIPPED check")
+	}
+}
+
+func TestEvaluate_FocusedTestsFailBlocksButNoProofDoesNot(t *testing.T) {
+	in := cleanInput()
+	in.FocusedTestsRequested = true
+	in.FocusedTests = commands.FocusedReport{
+		Available: true,
+		Results:   []commands.Result{{Category: commands.FocusedTest, Verdict: commands.NoProof}},
+	}
+	if d := Evaluate(in); d.Blocked {
+		t.Fatalf("a focused-test NO PROOF is a best-effort/additive signal — it must not block, got: %v", d.Reasons)
+	}
+
+	in.FocusedTests.Results = append(in.FocusedTests.Results, commands.Result{Category: commands.FocusedTest, Verdict: commands.Fail})
+	if d := Evaluate(in); !d.Blocked {
+		t.Fatal("a real focused-test FAIL is real evidence and should block")
+	}
+}
+
 func TestEvaluate_EmptyCommandsWithoutSkipDoesNotBlock(t *testing.T) {
 	// No toolchain detected at all (e.g. a docs-only repo) is an honest
 	// "nothing to run," not a failure to run something — must not block.
