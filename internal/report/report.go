@@ -18,6 +18,15 @@
 //   - Findings that repeat per-file (frontend overlap risk, incompleteness
 //     markers) are grouped under the file once instead of repeating the
 //     file path and reason sentence for every line in it.
+//   - Every check's headline and overview label is plain language first
+//     (added 2026-09-17, same round of feedback: "the overview contents
+//     are vague! a newbie can't [read] terms like hero-act, contract").
+//     A newbie reading "New bugs this session" shouldn't need to already
+//     know this tool calls that the hero-act check. The original internal
+//     name still appears in parentheses right after the headline (e.g.
+//     "Backend route conflicts (overlap check)") so it stays greppable
+//     and matches the vocabulary CLAUDE.md/progress.md already use — but
+//     it's never the first thing a reader has to parse.
 package report
 
 import (
@@ -49,7 +58,7 @@ func WriteOverview(w io.Writer, summaries []CheckSummary) {
 	fmt.Fprintln(w, "OVERVIEW")
 	fmt.Fprintln(w, strings.Repeat("=", 78))
 	for _, s := range summaries {
-		fmt.Fprintf(w, "  %-13s %s\n", s.Label, s.Line)
+		fmt.Fprintf(w, "  %-34s %s\n", s.Label, s.Line)
 	}
 	fmt.Fprintln(w)
 }
@@ -70,7 +79,8 @@ func groupByKey[T any](items []T, key func(T) string) (order []string, groups ma
 }
 
 func WriteWiring(w io.Writer, results []wiring.Result) CheckSummary {
-	fmt.Fprintln(w, "WIRING — does a frontend action actually reach a real backend route?")
+	fmt.Fprintln(w, "Buttons reach the backend (wiring check)")
+	fmt.Fprintln(w, "does a frontend button/action actually reach a real backend route, or is it just built on screen?")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 
 	var fails, passes, noProof []wiring.Result
@@ -122,13 +132,14 @@ func WriteWiring(w io.Writer, results []wiring.Result) CheckSummary {
 	}
 
 	return CheckSummary{
-		Label: "WIRING",
+		Label: "Buttons reach the backend",
 		Line:  fmt.Sprintf("%d PASS · %d FAIL · %d NO PROOF", len(passes), len(fails), len(noProof)),
 	}
 }
 
 func WriteContract(w io.Writer, results []contract.Result) CheckSummary {
-	fmt.Fprintln(w, "CONTRACT — does the wired call agree with the route on HTTP method and request fields?")
+	fmt.Fprintln(w, "Frontend & backend agree on data (contract check)")
+	fmt.Fprintln(w, "for a button that's wired up, does it send the same HTTP method and fields the backend expects?")
 	fmt.Fprintln(w, "(shape-level only — a MATCH here is not a claim that the business result is correct;")
 	fmt.Fprintln(w, " body-field agreement is JS/TS-only, and only checked when both sides are a literal object)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
@@ -202,22 +213,23 @@ func WriteContract(w io.Writer, results []contract.Result) CheckSummary {
 	}
 
 	return CheckSummary{
-		Label: "CONTRACT",
+		Label: "Frontend & backend agree on data",
 		Line:  fmt.Sprintf("%d MATCH · %d MISMATCH · %d NO PROOF", match, mismatch, notTested),
 	}
 }
 
 func WritePlanAuthority(w io.Writer, res planauthority.Result) CheckSummary {
-	fmt.Fprintln(w, "NOT-IN-PLAN — code changed this session with no matching plan entry")
+	fmt.Fprintln(w, "Unplanned code (not-in-plan check)")
+	fmt.Fprintln(w, "did the agent build anything this session your plan never asked for?")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !res.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
-		return CheckSummary{Label: "NOT-IN-PLAN", Line: "SKIPPED"}
+		return CheckSummary{Label: "Unplanned code", Line: "SKIPPED"}
 	}
 	if len(res.Findings) == 0 {
 		fmt.Fprintln(w, "nothing flagged — every route/call changed this session matches a plan entry")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "NOT-IN-PLAN", Line: "clean"}
+		return CheckSummary{Label: "Unplanned code", Line: "clean"}
 	}
 	for _, f := range res.Findings {
 		fmt.Fprintf(w, "  %s %s\n", f.Kind, f.Path)
@@ -227,17 +239,18 @@ func WritePlanAuthority(w io.Writer, res planauthority.Result) CheckSummary {
 		fmt.Fprintf(w, "    evidence: %s:%d\n", f.File, f.Line)
 	}
 	fmt.Fprintln(w)
-	return CheckSummary{Label: "NOT-IN-PLAN", Line: fmt.Sprintf("%d flagged", len(res.Findings))}
+	return CheckSummary{Label: "Unplanned code", Line: fmt.Sprintf("%d flagged", len(res.Findings))}
 }
 
 func WriteHeroPatterns(w io.Writer, res heropatterns.Report) CheckSummary {
-	fmt.Fprintln(w, "HERO-ACT — known bug patterns this session's own code introduced, no self-report")
+	fmt.Fprintln(w, "New bugs this session (hero-act check)")
+	fmt.Fprintln(w, "did this session's own code introduce a known bug pattern — no self-report, read straight from the code")
 	fmt.Fprintln(w, "(git baseline always runs once a session started; `malveon watch` adds detection for a")
 	fmt.Fprintln(w, " pattern that appeared and disappeared entirely within the session)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !res.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
-		return CheckSummary{Label: "HERO-ACT", Line: "SKIPPED"}
+		return CheckSummary{Label: "New bugs this session", Line: "SKIPPED"}
 	}
 	if !res.WatchAvailable {
 		fmt.Fprintf(w, "note: %s — \"introduced and fixed within the session\" detection didn't run this time\n\n", res.WatchReason)
@@ -245,23 +258,24 @@ func WriteHeroPatterns(w io.Writer, res heropatterns.Report) CheckSummary {
 	if len(res.Findings) == 0 {
 		fmt.Fprintln(w, "nothing flagged — no known bug pattern was introduced this session")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "HERO-ACT", Line: "clean"}
+		return CheckSummary{Label: "New bugs this session", Line: "clean"}
 	}
 	for _, f := range res.Findings {
 		fmt.Fprintf(w, "  [%s] %s — %s\n", f.Status, f.File, f.Pattern)
 		fmt.Fprintf(w, "    %s\n", f.Reason)
 	}
 	fmt.Fprintln(w)
-	return CheckSummary{Label: "HERO-ACT", Line: fmt.Sprintf("%d found", len(res.Findings))}
+	return CheckSummary{Label: "New bugs this session", Line: fmt.Sprintf("%d found", len(res.Findings))}
 }
 
 func WriteOverlap(w io.Writer, findings []overlap.Finding) CheckSummary {
-	fmt.Fprintln(w, "OVERLAP — two or more route registrations claiming the same method+path")
+	fmt.Fprintln(w, "Backend route conflicts (overlap check)")
+	fmt.Fprintln(w, "are two or more backend routes registered for the same method+path, so only one can ever run?")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if len(findings) == 0 {
 		fmt.Fprintln(w, "nothing flagged — no colliding route registrations found")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "OVERLAP", Line: "clean"}
+		return CheckSummary{Label: "Backend route conflicts", Line: "clean"}
 	}
 	for _, f := range findings {
 		fmt.Fprintf(w, "  %s %s — registered %d times\n", f.Method, f.Path, len(f.Nodes))
@@ -273,7 +287,7 @@ func WriteOverlap(w io.Writer, findings []overlap.Finding) CheckSummary {
 		}
 	}
 	fmt.Fprintln(w)
-	return CheckSummary{Label: "OVERLAP", Line: fmt.Sprintf("%d collision(s)", len(findings))}
+	return CheckSummary{Label: "Backend route conflicts", Line: fmt.Sprintf("%d collision(s)", len(findings))}
 }
 
 // WriteUIOverlap groups findings by file (the same risk sentence used to
@@ -282,14 +296,15 @@ func WriteOverlap(w io.Writer, findings []overlap.Finding) CheckSummary {
 // by file, since a file with several flagged elements is one place to go
 // fix, not several unrelated ones.
 func WriteUIOverlap(w io.Writer, findings []uioverlap.Finding) CheckSummary {
-	fmt.Fprintln(w, "FRONTEND OVERLAP RISK — positioned elements with no positioning context in the file")
+	fmt.Fprintln(w, "UI elements may overlap (frontend overlap risk check)")
+	fmt.Fprintln(w, "is a positioned element (CSS absolute) missing the ancestor it needs to stay inside its container?")
 	fmt.Fprintln(w, "(structural risk only — this is not a claim that two elements actually overlap on screen;")
 	fmt.Fprintln(w, " confirming that needs a real render, which this check deliberately doesn't do)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if len(findings) == 0 {
 		fmt.Fprintln(w, "nothing flagged — no positioned elements without a positioning context found")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "UI OVERLAP", Line: "clean"}
+		return CheckSummary{Label: "UI elements may overlap", Line: "clean"}
 	}
 
 	reasonOrder, reasonGroups := groupByKey(findings, func(f uioverlap.Finding) string { return f.Reason })
@@ -307,7 +322,7 @@ func WriteUIOverlap(w io.Writer, findings []uioverlap.Finding) CheckSummary {
 		fmt.Fprintln(w)
 	}
 	return CheckSummary{
-		Label: "UI OVERLAP",
+		Label: "UI elements may overlap",
 		Line:  fmt.Sprintf("%d risk across %d file(s)", len(findings), len(files)),
 	}
 }
@@ -315,18 +330,19 @@ func WriteUIOverlap(w io.Writer, findings []uioverlap.Finding) CheckSummary {
 // WriteIncompleteness groups markers by file for the same reason
 // WriteUIOverlap does — a file with several TODOs is one stop, not several.
 func WriteIncompleteness(w io.Writer, res incompleteness.Report) CheckSummary {
-	fmt.Fprintln(w, "INCOMPLETENESS — TODO/FIXME/HACK/XXX markers left in code changed this session")
+	fmt.Fprintln(w, "Unfinished code (TODOs) (incompleteness check)")
+	fmt.Fprintln(w, "does the code changed this session admit its own gaps — TODO/FIXME/HACK/XXX/\"not implemented\"?")
 	fmt.Fprintln(w, "(code-only signal: presence is real proof the code admits a gap; absence proves nothing —")
 	fmt.Fprintln(w, " this can never substitute for the confidence check below, which tests an actual claim)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !res.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", res.Reason)
-		return CheckSummary{Label: "INCOMPLETE", Line: "SKIPPED"}
+		return CheckSummary{Label: "Unfinished code (TODOs)", Line: "SKIPPED"}
 	}
 	if len(res.Findings) == 0 {
 		fmt.Fprintln(w, "nothing flagged — no incompleteness marker found in files changed this session")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "INCOMPLETE", Line: "clean"}
+		return CheckSummary{Label: "Unfinished code (TODOs)", Line: "clean"}
 	}
 	fileOrder, fileGroups := groupByKey(res.Findings, func(f incompleteness.Finding) string { return f.File })
 	for _, file := range fileOrder {
@@ -338,17 +354,18 @@ func WriteIncompleteness(w io.Writer, res incompleteness.Report) CheckSummary {
 	}
 	fmt.Fprintln(w)
 	return CheckSummary{
-		Label: "INCOMPLETE",
+		Label: "Unfinished code (TODOs)",
 		Line:  fmt.Sprintf("%d flagged across %d file(s)", len(res.Findings), len(fileOrder)),
 	}
 }
 
 func WriteConfidence(w io.Writer, report confidence.Report) CheckSummary {
-	fmt.Fprintln(w, "CONFIDENCE — does the agent's own claim match what was actually verified?")
+	fmt.Fprintln(w, "Agent's claims vs reality (confidence check)")
+	fmt.Fprintln(w, "when the agent said \"done\"/\"working\" in a commit message, did the other checks actually agree?")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 	if !report.Available {
 		fmt.Fprintf(w, "SKIPPED: %s\n\n", report.Reason)
-		return CheckSummary{Label: "CONFIDENCE", Line: "SKIPPED"}
+		return CheckSummary{Label: "Agent's claims vs reality", Line: "SKIPPED"}
 	}
 
 	var mismatches, confirmed, notClaimed []confidence.Result
@@ -390,7 +407,7 @@ func WriteConfidence(w io.Writer, report confidence.Report) CheckSummary {
 	}
 
 	return CheckSummary{
-		Label: "CONFIDENCE",
+		Label: "Agent's claims vs reality",
 		Line:  fmt.Sprintf("%d CONFIRMED · %d MISMATCH · %d NOT CLAIMED", len(confirmed), len(mismatches), len(notClaimed)),
 	}
 }
