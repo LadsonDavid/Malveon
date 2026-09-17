@@ -176,8 +176,15 @@ func runCheck(args []string) {
 	// The one check that executes real commands instead of reading the
 	// code graph — see CLAUDE.md 3.2.11. Runs by default; --skip-exec is
 	// a deliberate opt-out the gate below never treats as a failure.
+	//
+	// The overview prints only after every section is computed (see
+	// below), and a real build/lint/typecheck/test run can take minutes —
+	// without a status line here, the terminal would sit completely silent
+	// that whole time and look indistinguishable from a hang. This prints
+	// to stderr, not stdout, so it never lands in a redirected/piped report.
 	var commandResults []commands.Result
 	if !*skipExec {
+		fmt.Fprintf(os.Stderr, "running the project's own build/lint/typecheck/test commands (up to %s per command, can take a few minutes)...\n", *execTimeout)
 		commandResults = commands.Run(*root, *execTimeout)
 	}
 
@@ -187,6 +194,7 @@ func runCheck(args []string) {
 	// the default.
 	var focusedReport commands.FocusedReport
 	if *focusedTests {
+		fmt.Fprintln(os.Stderr, "running focused tests scoped to this session's changes...")
 		focusedReport = commands.RunFocused(*root, *execTimeout)
 	}
 

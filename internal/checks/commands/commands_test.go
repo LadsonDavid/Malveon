@@ -203,10 +203,16 @@ func TestRun_OneTimeoutDoesNotBlockOthers(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "package.json", `{"scripts": {
 		"build": "node -e \"process.exit(0)\"",
-		"lint": "node -e \"setTimeout(()=>{}, 5000)\""
+		"lint": "node -e \"setTimeout(()=>{}, 10000)\""
 	}}`)
 
-	byCat := indexByCategory(t, Run(dir, 300*time.Millisecond))
+	// 3s, not the ~200-300ms this test originally used: npm's own cold-start
+	// overhead (resolving package.json, spawning node) measured at 866ms on
+	// a real Windows machine for this exact trivial script — a short
+	// timeout here was timing out npm's own startup, not proving anything
+	// about the Bulkhead property this test exists to check. lint's hang is
+	// 10s so it reliably still exceeds this timeout on any machine.
+	byCat := indexByCategory(t, Run(dir, 3*time.Second))
 
 	if got := byCat[Build].Verdict; got != Pass {
 		t.Errorf("build should have run and passed despite lint hanging, got %s", got)
