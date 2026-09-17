@@ -3,9 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -140,22 +142,36 @@ func runCheck(args []string) {
 
 	wiringResults := wiring.Run(g, fs)
 
-	report.WriteWiring(os.Stdout, wiringResults)
-	report.WriteContract(os.Stdout, contract.Run(g, fs))
-	report.WriteOverlap(os.Stdout, overlap.Run(g, *root))
-
 	uiFindings, uiErr := uioverlap.Run(*root)
 	if uiErr != nil {
 		fmt.Fprintf(os.Stderr, "error scanning for frontend overlap risk: %v\n", uiErr)
 		os.Exit(1)
 	}
-	report.WriteUIOverlap(os.Stdout, uiFindings)
 
-	report.WritePlanAuthority(os.Stdout, planauthority.Run(g, fs, *root))
+	// Each section is rendered into its own buffer so the overview (which
+	// needs every section's summary) can print first, before any of the
+	// detail it summarizes — see internal/report's package doc comment.
+	var sections []*bytes.Buffer
+	var summaries []report.CheckSummary
+	render := func(write func(io.Writer) report.CheckSummary) {
+		buf := &bytes.Buffer{}
+		summaries = append(summaries, write(buf))
+		sections = append(sections, buf)
+	}
 
-	report.WriteHeroPatterns(os.Stdout, heropatterns.Run(*root))
+	render(func(w io.Writer) report.CheckSummary { return report.WriteWiring(w, wiringResults) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteContract(w, contract.Run(g, fs)) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteOverlap(w, overlap.Run(g, *root)) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteUIOverlap(w, uiFindings) })
+	render(func(w io.Writer) report.CheckSummary { return report.WritePlanAuthority(w, planauthority.Run(g, fs, *root)) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteHeroPatterns(w, heropatterns.Run(*root)) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteIncompleteness(w, incompleteness.Run(*root)) })
+	render(func(w io.Writer) report.CheckSummary {
+		return report.WriteConfidence(w, confidence.Run(fs, wiringResults, *root, *claimedSummary))
+	})
 
-	report.WriteIncompleteness(os.Stdout, incompleteness.Run(*root))
-
-	report.WriteConfidence(os.Stdout, confidence.Run(fs, wiringResults, *root, *claimedSummary))
+	report.WriteOverview(os.Stdout, summaries)
+	for _, s := range sections {
+		os.Stdout.Write(s.Bytes())
+	}
 }
