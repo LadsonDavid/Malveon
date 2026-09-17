@@ -406,6 +406,11 @@ func WriteConfidence(w io.Writer, report confidence.Report) CheckSummary {
 		fmt.Fprintln(w)
 	}
 
+	if len(mismatches) == 0 && len(confirmed) == 0 && len(notClaimed) == 0 {
+		fmt.Fprintln(w, "nothing to check — no commit messages found since session start")
+		fmt.Fprintln(w)
+	}
+
 	return CheckSummary{
 		Label: "Agent's claims vs reality",
 		Line:  fmt.Sprintf("%d CONFIRMED · %d MISMATCH · %d NOT CLAIMED", len(confirmed), len(mismatches), len(notClaimed)),
