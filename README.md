@@ -2,13 +2,13 @@
 
 Checks whether an AI coding agent's claimed-done work actually matches your plan — not by asking the agent, but by reading the real code.
 
-Static analysis only. No live server, no browser, nothing runs. If it can't prove something from the code, it says so instead of guessing.
+Mostly static analysis — no server, no browser, no deployed app, ever. The one exception: it also runs your project's own real build/lint/typecheck/test commands and reports what they actually said, not a guess. If it can't prove something, it says so instead of guessing.
 
 ## The problem this solves
 
 AI coding agents say "done" confidently, whether or not it's true. A button gets built with no backend behind it. A backend gets built with nothing calling it. Two handlers silently claim the same route. The agent audits its own work in the same session it just wrote — and usually gives itself a passing grade, even when it shouldn't.
 
-`malveon check` reads the actual code and git history and reports nine things:
+`malveon check` reads the actual code and git history — and, for one check, actually runs your project's own commands — and reports ten things:
 
 - **Wiring** — does a frontend action you planned actually reach a real backend route? A miss says exactly which side is missing — backend built with no frontend, frontend built with no backend, or neither found.
 - **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
@@ -18,8 +18,9 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Hero-act** — did this session's own code introduce a known bug pattern — whether it's still sitting there right now, or got fixed along the way? Two zero-self-report signals: a git-baseline comparison (always on once a session started — catches a bug that's still live) and, if `malveon watch` was running, a captured-snapshot comparison (catches one that appeared and disappeared entirely within the session, which a single before/after diff can't see).
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
+- **Command check** — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started.
 
-Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer.
+Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
 
 ## Install
 
@@ -51,20 +52,37 @@ malveon watch &   # background — watches the code as the agent works, Ctrl-C w
 malveon check
 ```
 
-That's it. `malveon check` with no flags: looks for a plan file across the whole project automatically and always confirms with you before using it (never assumes, even a clear single match — see below), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, and reads known-bug-pattern findings from whatever `malveon watch` captured while it ran — nothing to ask the agent, nothing to paste, for any of it.
+That's it. `malveon check` with no flags: looks for a plan file across the whole project automatically and always confirms with you before using it (never assumes, even a clear single match — see below), reads the agent's confidence claims straight from its commit messages, scans files changed this session for incompleteness markers, reads known-bug-pattern findings from whatever `malveon watch` captured while it ran, and runs your project's own real build/lint/typecheck/test commands — nothing to ask the agent, nothing to paste, for any of it.
 
 `malveon watch` is optional — hero-act still works without it, using the git-baseline signal alone (catches a bad pattern that's still present right now). Running it adds a second signal: catching a bad pattern (a real, named catalog — an accidental `if (x = 5)`, a silently swallowed Go error, a bare Python `except:`) that appeared and got fixed entirely within the session, which the git comparison alone can't see. No self-report involved either way.
 
 Want to override any of the automatic behavior?
 
 ```bash
-malveon check --features features.json --claimed-summary summary.txt
+malveon check --features features.json --claimed-summary summary.txt --exec-timeout 5m
 ```
 
 - `--features <path>` — skips the plan auto-detect/prompt, use this exact file.
 - `--claimed-summary <path>` — override the automatic commit-message reading with something else, for the confidence check.
+- `--skip-exec` — don't run the project's own build/lint/typecheck/test commands at all.
+- `--exec-timeout <duration>` — override the default 3-minute hard timeout per command (e.g. `5m`, `90s`).
+- `--no-gate` — still print the full report and the blocking reasons, but always exit 0.
 
 All optional — leave any out and that section of the report shows itself skipped, with a plain reason, instead of silently doing nothing.
+
+## Blocking a commit
+
+By default, `malveon check` exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all (no session started, a crashed watcher, an unresolved wiring/contract/command result) — the report ends with a plain `GATE: clean` or `GATE: blocked` line naming exactly why. A `NOT IN PLAN` flag, an incompleteness marker, or a frontend-overlap-risk finding never blocks on its own — those are explicitly human-review/structural-risk signals, not proven problems.
+
+To actually block a commit on it, wire it into a pre-commit hook — malveon never installs one for you:
+
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit (chmod +x)
+malveon check --features path/to/your/plan.json
+```
+
+Always pass `--features` explicitly in a hook — a hook has no terminal to ask which plan file to use, and a non-interactive run without it fails fast rather than hanging. Add `--skip-exec` here if the build/lint/test commands are already run elsewhere (e.g. CI) and you only want the graph-based checks gating the commit itself.
 
 ## The plan file
 
@@ -103,7 +121,8 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 ## What it can't do (yet)
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
-- Doesn't run anything live — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass.
+- No server, no browser, no deployed app, ever — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
+- The command check runs your project's *whole* defined test command, not just tests relevant to what changed ("focused" tests) — no test-selection logic, on purpose, since a wrong selection could hide a real regression. A single fixed timeout applies to every command rather than one tuned per category.
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
 - Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.

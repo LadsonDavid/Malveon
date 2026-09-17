@@ -33,7 +33,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
+	"github.com/LadsonDavid/beta-test/internal/checks/commands"
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
@@ -415,4 +417,103 @@ func WriteConfidence(w io.Writer, report confidence.Report) CheckSummary {
 		Label: "Agent's claims vs reality",
 		Line:  fmt.Sprintf("%d CONFIRMED · %d MISMATCH · %d NOT CLAIMED", len(confirmed), len(mismatches), len(notClaimed)),
 	}
+}
+
+// WriteCommands renders the one check that executes real commands
+// instead of reading the code graph — see CLAUDE.md 3.2.11. skipped is
+// true only when the tester explicitly passed --skip-exec; that's a
+// deliberate opt-out, not an involuntary "couldn't run" the way a
+// missing session is for the other session-scoped checks, so it's
+// reported plainly rather than as SKIPPED/unavailable.
+func WriteCommands(w io.Writer, results []commands.Result, skipped bool) CheckSummary {
+	fmt.Fprintln(w, "Build, lint & tests actually ran (command check)")
+	fmt.Fprintln(w, "did the project's own build/lint/typecheck/test commands really run just now, and what did they report?")
+	fmt.Fprintln(w, "(the one check that executes real commands instead of reading the code graph — only a command the")
+	fmt.Fprintln(w, " project already defines is ever run; nothing is guessed, and no server or browser is ever started)")
+	fmt.Fprintln(w, strings.Repeat("-", 78))
+
+	if skipped {
+		fmt.Fprintln(w, "skipped — disabled via --skip-exec")
+		fmt.Fprintln(w)
+		return CheckSummary{Label: "Build, lint & tests actually ran", Line: "skipped (--skip-exec)"}
+	}
+	if len(results) == 0 {
+		fmt.Fprintln(w, "nothing to run — no Makefile/package.json/go.mod/Python manifest found anywhere in the project")
+		fmt.Fprintln(w)
+		return CheckSummary{Label: "Build, lint & tests actually ran", Line: "no toolchain found"}
+	}
+
+	var fails, passes, noProof []commands.Result
+	for _, r := range results {
+		switch r.Verdict {
+		case commands.Fail:
+			fails = append(fails, r)
+		case commands.Pass:
+			passes = append(passes, r)
+		default:
+			noProof = append(noProof, r)
+		}
+	}
+
+	if len(fails) > 0 {
+		fmt.Fprintf(w, "FAIL (%d) — the project's own command actually failed just now, look at these first\n", len(fails))
+		for _, r := range fails {
+			fmt.Fprintf(w, "  %s\n", commandLabel(r))
+			fmt.Fprintf(w, "    command: %s\n", r.Command)
+			fmt.Fprintf(w, "    %s\n", r.Reason)
+			for _, line := range lastLines(r.Output, 20) {
+				fmt.Fprintf(w, "      %s\n", line)
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	if len(passes) > 0 {
+		fmt.Fprintf(w, "PASS (%d) — ran clean\n", len(passes))
+		for _, r := range passes {
+			fmt.Fprintf(w, "  %s — %s (%s)\n", commandLabel(r), r.Command, r.Duration.Round(time.Millisecond))
+		}
+		fmt.Fprintln(w)
+	}
+
+	if len(noProof) > 0 {
+		fmt.Fprintf(w, "NO PROOF (%d) — nothing solid either way, grouped by why\n", len(noProof))
+		order, groups := groupByKey(noProof, func(r commands.Result) string { return r.Reason })
+		for _, reason := range order {
+			items := groups[reason]
+			fmt.Fprintf(w, "  %s (%d)\n", reason, len(items))
+			for _, r := range items {
+				fmt.Fprintf(w, "    - %s\n", commandLabel(r))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+
+	return CheckSummary{
+		Label: "Build, lint & tests actually ran",
+		Line:  fmt.Sprintf("%d PASS · %d FAIL · %d NO PROOF", len(passes), len(fails), len(noProof)),
+	}
+}
+
+func commandLabel(r commands.Result) string {
+	where := r.Dir
+	if where == "." {
+		where = "project root"
+	}
+	return fmt.Sprintf("%s (%s, %s)", strings.ToUpper(string(r.Category)), r.Stack, where)
+}
+
+// lastLines caps a command's captured output to its final n lines, so one
+// noisy failing command can't drown the report the way the pre-redesign
+// per-feature repetition did (see the package doc comment).
+func lastLines(output string, n int) []string {
+	output = strings.TrimRight(output, "\n")
+	if output == "" {
+		return nil
+	}
+	lines := strings.Split(output, "\n")
+	if len(lines) <= n {
+		return lines
+	}
+	return append([]string{fmt.Sprintf("…(%d earlier lines omitted)…", len(lines)-n)}, lines[len(lines)-n:]...)
 }

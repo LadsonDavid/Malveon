@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/LadsonDavid/beta-test/internal/checks/commands"
 	"github.com/LadsonDavid/beta-test/internal/checks/confidence"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/heropatterns"
@@ -22,6 +23,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
 	"github.com/LadsonDavid/beta-test/internal/extractor"
 	"github.com/LadsonDavid/beta-test/internal/features"
+	"github.com/LadsonDavid/beta-test/internal/gate"
 	"github.com/LadsonDavid/beta-test/internal/report"
 	"github.com/LadsonDavid/beta-test/internal/session"
 	"github.com/LadsonDavid/beta-test/internal/watch"
@@ -53,10 +55,16 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    Run this in the background before the agent's task begins, so the")
 	fmt.Fprintln(os.Stderr, "    hero-act check has real history to check — no self-report needed. Ctrl-C to stop.")
 	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--claimed-summary <path>]")
+	fmt.Fprintln(os.Stderr, "                [--skip-exec] [--exec-timeout <duration>] [--no-gate]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
 	fmt.Fprintln(os.Stderr, "    --claimed-summary can be omitted too: the confidence check reads commit")
 	fmt.Fprintln(os.Stderr, "    messages since session start automatically. Pass it to use something else instead.")
+	fmt.Fprintln(os.Stderr, "    By default, malveon also runs the project's own real build/lint/typecheck/test")
+	fmt.Fprintln(os.Stderr, "    commands (whatever it's defined — Makefile, package.json, Go, or Python tooling)")
+	fmt.Fprintln(os.Stderr, "    and exits non-zero if anything failed, couldn't be resolved, or a check couldn't")
+	fmt.Fprintln(os.Stderr, "    run at all — so a git pre-commit hook can block on it. --skip-exec disables the")
+	fmt.Fprintln(os.Stderr, "    command runs; --no-gate keeps the report but always exits 0.")
 }
 
 func runSession(args []string) {
@@ -97,6 +105,9 @@ func runCheck(args []string) {
 	featuresPath := fset.String("features", "", "path to the features file: .json, .md (checklist), or plain text (required)")
 	root := fset.String("root", ".", "repo root to scan")
 	claimedSummary := fset.String("claimed-summary", "", "optional: path to a plain-text file of the agent's own claims (overrides the automatic commit-message scan for the confidence check)")
+	skipExec := fset.Bool("skip-exec", false, "skip running the project's own build/lint/typecheck/test commands")
+	execTimeout := fset.Duration("exec-timeout", commands.DefaultTimeout, "hard per-command timeout for the build/lint/typecheck/test check")
+	noGate := fset.Bool("no-gate", false, "still print the full report, but always exit 0 regardless of what was found")
 	fset.Parse(args)
 
 	if *featuresPath == "" {
@@ -140,12 +151,30 @@ func runCheck(args []string) {
 		os.Exit(1)
 	}
 
+	// Every check's result is held in a named variable, not just inside a
+	// render closure, so the exit-code gate (internal/gate) can inspect
+	// the exact same values the report renders — the printed report and
+	// the exit code can never disagree about what a run actually found.
 	wiringResults := wiring.Run(g, fs)
+	contractResults := contract.Run(g, fs)
+	overlapFindings := overlap.Run(g, *root)
+	planResult := planauthority.Run(g, fs, *root)
+	heroReport := heropatterns.Run(*root)
+	incompletenessReport := incompleteness.Run(*root)
+	confidenceReport := confidence.Run(fs, wiringResults, *root, *claimedSummary)
 
 	uiFindings, uiErr := uioverlap.Run(*root)
 	if uiErr != nil {
 		fmt.Fprintf(os.Stderr, "error scanning for frontend overlap risk: %v\n", uiErr)
 		os.Exit(1)
+	}
+
+	// The one check that executes real commands instead of reading the
+	// code graph — see CLAUDE.md 3.2.11. Runs by default; --skip-exec is
+	// a deliberate opt-out the gate below never treats as a failure.
+	var commandResults []commands.Result
+	if !*skipExec {
+		commandResults = commands.Run(*root, *execTimeout)
 	}
 
 	// Each section is rendered into its own buffer so the overview (which
@@ -160,18 +189,42 @@ func runCheck(args []string) {
 	}
 
 	render(func(w io.Writer) report.CheckSummary { return report.WriteWiring(w, wiringResults) })
-	render(func(w io.Writer) report.CheckSummary { return report.WriteContract(w, contract.Run(g, fs)) })
-	render(func(w io.Writer) report.CheckSummary { return report.WriteOverlap(w, overlap.Run(g, *root)) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteContract(w, contractResults) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteOverlap(w, overlapFindings) })
 	render(func(w io.Writer) report.CheckSummary { return report.WriteUIOverlap(w, uiFindings) })
-	render(func(w io.Writer) report.CheckSummary { return report.WritePlanAuthority(w, planauthority.Run(g, fs, *root)) })
-	render(func(w io.Writer) report.CheckSummary { return report.WriteHeroPatterns(w, heropatterns.Run(*root)) })
-	render(func(w io.Writer) report.CheckSummary { return report.WriteIncompleteness(w, incompleteness.Run(*root)) })
-	render(func(w io.Writer) report.CheckSummary {
-		return report.WriteConfidence(w, confidence.Run(fs, wiringResults, *root, *claimedSummary))
-	})
+	render(func(w io.Writer) report.CheckSummary { return report.WritePlanAuthority(w, planResult) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteHeroPatterns(w, heroReport) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteIncompleteness(w, incompletenessReport) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteConfidence(w, confidenceReport) })
+	render(func(w io.Writer) report.CheckSummary { return report.WriteCommands(w, commandResults, *skipExec) })
 
 	report.WriteOverview(os.Stdout, summaries)
 	for _, s := range sections {
 		os.Stdout.Write(s.Bytes())
 	}
+
+	decision := gate.Evaluate(gate.Input{
+		Wiring:          wiringResults,
+		Contract:        contractResults,
+		Overlap:         overlapFindings,
+		PlanAuthority:   planResult,
+		HeroPatterns:    heroReport,
+		Confidence:      confidenceReport,
+		Commands:        commandResults,
+		CommandsSkipped: *skipExec,
+	})
+	if !decision.Blocked {
+		fmt.Println("GATE: clean — nothing here blocks a commit")
+		return
+	}
+
+	fmt.Println("GATE: blocked — a commit gated on this run should not proceed")
+	for _, r := range decision.Reasons {
+		fmt.Printf("  - %s\n", r)
+	}
+	if *noGate {
+		fmt.Println("(--no-gate given: exiting 0 anyway)")
+		return
+	}
+	os.Exit(1)
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LadsonDavid/beta-test/internal/checks/commands"
 	"github.com/LadsonDavid/beta-test/internal/checks/contract"
 	"github.com/LadsonDavid/beta-test/internal/checks/uioverlap"
 	"github.com/LadsonDavid/beta-test/internal/checks/wiring"
@@ -71,6 +72,49 @@ func TestWriteUIOverlapGroupsByFile(t *testing.T) {
 		t.Errorf("expected the shared reason sentence to print exactly once, got:\n%s", out)
 	}
 	if summary.Line != "3 risk across 2 file(s)" {
+		t.Errorf("unexpected summary line: %q", summary.Line)
+	}
+}
+
+// TestWriteCommandsSkipFlagIsDistinctFromNoToolchain proves the two
+// different "nothing ran" states print (and summarize) differently: a
+// deliberate --skip-exec opt-out is not the same fact as malveon
+// genuinely finding no Makefile/package.json/go.mod/Python manifest
+// anywhere in the project.
+func TestWriteCommandsSkipFlagIsDistinctFromNoToolchain(t *testing.T) {
+	var skipped, empty bytes.Buffer
+	skipSummary := WriteCommands(&skipped, nil, true)
+	emptySummary := WriteCommands(&empty, nil, false)
+
+	if skipSummary.Line == emptySummary.Line {
+		t.Errorf("expected distinct summaries for --skip-exec vs. no toolchain found, both got %q", skipSummary.Line)
+	}
+	if !strings.Contains(skipped.String(), "--skip-exec") {
+		t.Errorf("expected the skipped section to mention --skip-exec, got:\n%s", skipped.String())
+	}
+}
+
+// TestWriteCommandsGroupsNoProofByReason mirrors the same collapsing
+// rule proven above for wiring — many NO PROOF rows sharing one reason
+// print that reason once, not once per row.
+func TestWriteCommandsGroupsNoProofByReason(t *testing.T) {
+	results := []commands.Result{
+		{Category: commands.Typecheck, Stack: "Node (npm)", Dir: ".", Verdict: commands.NoProof, Reason: "no \"typecheck\" script in package.json"},
+		{Category: commands.Test, Stack: "Node (npm)", Dir: ".", Verdict: commands.NoProof, Reason: "no \"typecheck\" script in package.json"},
+		{Category: commands.Build, Stack: "Node (npm)", Dir: ".", Verdict: commands.Fail, Reason: "`npm run build` exited with an error", Output: "line1\nline2"},
+		{Category: commands.Lint, Stack: "Node (npm)", Dir: ".", Verdict: commands.Pass, Command: "npm run lint"},
+	}
+	var buf bytes.Buffer
+	summary := WriteCommands(&buf, results, false)
+	out := buf.String()
+
+	if strings.Count(out, `no "typecheck" script in package.json`) != 1 {
+		t.Errorf("expected the shared NO PROOF reason to print exactly once, got:\n%s", out)
+	}
+	if !strings.Contains(out, "line1") || !strings.Contains(out, "line2") {
+		t.Errorf("expected the FAIL row's output tail printed, got:\n%s", out)
+	}
+	if summary.Line != "1 PASS · 1 FAIL · 2 NO PROOF" {
 		t.Errorf("unexpected summary line: %q", summary.Line)
 	}
 }
