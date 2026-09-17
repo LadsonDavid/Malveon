@@ -39,9 +39,7 @@ irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
 
 That downloads the right file for your computer and sets it up so you can just type `malveon` from any folder, from now on. On a Mac, it also clears the security warning new downloads normally get, so your first run isn't blocked.
 
-On Windows, you'll likely see a blue "Windows protected your PC" screen the first time you run `malveon`. That's normal for any new, unsigned program, not a sign something's wrong. Click "More info," then "Run anyway."
-
-Close your terminal window and open a new one (this step matters, it's how your computer picks up the change). Then type:
+Now close your terminal window and open a brand new one. This step actually matters: your current terminal doesn't know about the change yet, only a new one will. Then type:
 ```bash
 malveon
 ```
@@ -49,7 +47,11 @@ If you see a list of commands instead of an error, it worked.
 
 Nothing else to install first. No Go, no Node, no extra toolchain. It's one file.
 
-**Prefer to do it by hand?** Download the file for your OS from the [Releases](../../releases) page. On Mac or Linux, run `chmod +x` on it (this just tells your computer the file is allowed to run), then move it into a folder already on your PATH, like `/usr/local/bin`.
+**Prefer to do it by hand?**
+
+On Mac or Linux: download the file for your OS from the [Releases](../../releases) page, run `chmod +x` on it (this just tells your computer the file is allowed to run), then move it into a folder already on your PATH, like `/usr/local/bin`.
+
+On Windows: downloading the `.exe` by itself is not enough to make `malveon` work as a bare command. The file also needs to be renamed to `malveon.exe` and placed somewhere on your PATH, and there's no single folder every Windows setup already has ready for that the way `/usr/local/bin` works on Mac or Linux. Run the install script above instead, it does exactly this for you and has been tested to actually work. If you'd rather not run any script at all, download the `.exe` and just run it directly from wherever you saved it, for example `.\malveon-windows-amd64.exe check`, no install needed, just typed from that exact folder every time.
 
 ## How to use it
 
