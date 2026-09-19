@@ -420,22 +420,23 @@ func WriteConfidence(w io.Writer, report confidence.Report) CheckSummary {
 }
 
 // WriteCommands renders the one check that executes real commands
-// instead of reading the code graph — see CLAUDE.md 3.2.11. skipped is
-// true only when the tester explicitly passed --skip-exec; that's a
-// deliberate opt-out, not an involuntary "couldn't run" the way a
-// missing session is for the other session-scoped checks, so it's
-// reported plainly rather than as SKIPPED/unavailable.
-func WriteCommands(w io.Writer, results []commands.Result, skipped bool) CheckSummary {
+// instead of reading the code graph — see CLAUDE.md 3.2.11. notRequested
+// is true whenever --exec wasn't passed (the default): this check is
+// opt-in, since it runs real subprocesses and can take minutes, so not
+// asking for it is a deliberate choice, not an involuntary "couldn't
+// run" the way a missing session is for the other session-scoped
+// checks — reported plainly rather than as SKIPPED/unavailable.
+func WriteCommands(w io.Writer, results []commands.Result, notRequested bool) CheckSummary {
 	fmt.Fprintln(w, "Build, lint & tests actually ran (command check)")
 	fmt.Fprintln(w, "did the project's own build/lint/typecheck/test commands really run just now, and what did they report?")
 	fmt.Fprintln(w, "(the one check that executes real commands instead of reading the code graph — only a command the")
 	fmt.Fprintln(w, " project already defines is ever run; nothing is guessed, and no server or browser is ever started)")
 	fmt.Fprintln(w, strings.Repeat("-", 78))
 
-	if skipped {
-		fmt.Fprintln(w, "skipped — disabled via --skip-exec")
+	if notRequested {
+		fmt.Fprintln(w, "not run — opt-in, pass --exec to run the project's own build/lint/typecheck/test commands for real")
 		fmt.Fprintln(w)
-		return CheckSummary{Label: "Build, lint & tests actually ran", Line: "skipped (--skip-exec)"}
+		return CheckSummary{Label: "Build, lint & tests actually ran", Line: "not run (pass --exec to include)"}
 	}
 	if len(results) == 0 {
 		fmt.Fprintln(w, "nothing to run — no Makefile/package.json/go.mod/Python manifest found anywhere in the project")

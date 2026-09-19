@@ -22,8 +22,9 @@
 //     proof of a real problem (3.2.8, 3.2.10).
 //   - CONFIRMED and NOT CLAIMED from the confidence check — neither is a
 //     contradiction of anything.
-//   - the command check's results when --skip-exec was passed — a
-//     deliberate opt-out by the tester is not an involuntary "couldn't
+//   - the command check's results when --exec wasn't passed — this check
+//     is opt-in (it runs real subprocesses and can take minutes), so not
+//     requesting it is a deliberate choice, not an involuntary "couldn't
 //     run" the way a missing session is for the other session-scoped
 //     checks; blocking on it would defeat the flag's own purpose.
 //   - a NO PROOF from focused-test mode (--focused-tests) — it's an
@@ -61,15 +62,15 @@ type Input struct {
 	HeroPatterns  heropatterns.Report
 	Confidence    confidence.Report
 
-	// Commands is ignored when CommandsSkipped is true (the tester
-	// passed --skip-exec).
-	Commands        []commands.Result
-	CommandsSkipped bool
+	// Commands is ignored when CommandsNotRequested is true (--exec
+	// wasn't passed — the default, since the command check is opt-in).
+	Commands             []commands.Result
+	CommandsNotRequested bool
 
 	// FocusedTests is only evaluated when FocusedTestsRequested is true
 	// (the tester passed --focused-tests) — an opt-in feature that was
 	// never asked for must never block on its own absence, same
-	// reasoning as CommandsSkipped above but inverted: here, asking for
+	// reasoning as CommandsNotRequested above but inverted: here, asking for
 	// it and not getting a usable result IS the involuntary "couldn't
 	// run" case.
 	FocusedTests          commands.FocusedReport
@@ -114,7 +115,7 @@ func Evaluate(in Input) Decision {
 		reasons = append(reasons, fmt.Sprintf("agent's claims vs reality: %d claim(s) contradicted by what was actually verified", n))
 	}
 
-	if !in.CommandsSkipped {
+	if !in.CommandsNotRequested {
 		if fail, noProof := countCommands(in.Commands); fail+noProof > 0 {
 			reasons = append(reasons, fmt.Sprintf("build/lint/test actually ran: %d FAIL, %d NO PROOF", fail, noProof))
 		}

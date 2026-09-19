@@ -134,7 +134,7 @@ func TestEvaluate_ConfidenceMismatchBlocksButNotClaimedDoesNot(t *testing.T) {
 	}
 }
 
-func TestEvaluate_CommandsFailBlocksUnlessSkipped(t *testing.T) {
+func TestEvaluate_CommandsFailBlocksUnlessNotRequested(t *testing.T) {
 	in := cleanInput()
 	in.Commands = []commands.Result{{Category: commands.Build, Verdict: commands.Fail}}
 
@@ -142,9 +142,9 @@ func TestEvaluate_CommandsFailBlocksUnlessSkipped(t *testing.T) {
 		t.Fatal("a real command FAIL should block")
 	}
 
-	in.CommandsSkipped = true
+	in.CommandsNotRequested = true
 	if d := Evaluate(in); d.Blocked {
-		t.Fatalf("--skip-exec is a deliberate opt-out — it must never block, got: %v", d.Reasons)
+		t.Fatalf("not passing --exec is a deliberate opt-in feature not requested — it must never block, got: %v", d.Reasons)
 	}
 }
 

@@ -76,21 +76,21 @@ func TestWriteUIOverlapGroupsByFile(t *testing.T) {
 	}
 }
 
-// TestWriteCommandsSkipFlagIsDistinctFromNoToolchain proves the two
-// different "nothing ran" states print (and summarize) differently: a
-// deliberate --skip-exec opt-out is not the same fact as malveon
+// TestWriteCommandsNotRequestedIsDistinctFromNoToolchain proves the two
+// different "nothing ran" states print (and summarize) differently: not
+// passing the opt-in --exec flag is not the same fact as malveon
 // genuinely finding no Makefile/package.json/go.mod/Python manifest
 // anywhere in the project.
-func TestWriteCommandsSkipFlagIsDistinctFromNoToolchain(t *testing.T) {
-	var skipped, empty bytes.Buffer
-	skipSummary := WriteCommands(&skipped, nil, true)
+func TestWriteCommandsNotRequestedIsDistinctFromNoToolchain(t *testing.T) {
+	var notRequested, empty bytes.Buffer
+	notRequestedSummary := WriteCommands(&notRequested, nil, true)
 	emptySummary := WriteCommands(&empty, nil, false)
 
-	if skipSummary.Line == emptySummary.Line {
-		t.Errorf("expected distinct summaries for --skip-exec vs. no toolchain found, both got %q", skipSummary.Line)
+	if notRequestedSummary.Line == emptySummary.Line {
+		t.Errorf("expected distinct summaries for not-requested vs. no toolchain found, both got %q", notRequestedSummary.Line)
 	}
-	if !strings.Contains(skipped.String(), "--skip-exec") {
-		t.Errorf("expected the skipped section to mention --skip-exec, got:\n%s", skipped.String())
+	if !strings.Contains(notRequested.String(), "--exec") {
+		t.Errorf("expected the not-requested section to mention --exec, got:\n%s", notRequested.String())
 	}
 }
 

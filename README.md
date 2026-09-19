@@ -2,13 +2,13 @@
 
 Checks whether an AI coding agent's claimed-done work actually matches your plan — not by asking the agent, but by reading the real code.
 
-Mostly static analysis — no browser, no deployed app, ever. Two exceptions: it also runs your project's own real build/lint/typecheck/test commands and reports what they actually said, not a guess, and it sends one small anonymous usage signal per run (see [Usage tracking](#usage-tracking) below, opt out anytime). If it can't prove something about your code, it says so instead of guessing.
+Mostly static analysis — no browser, no deployed app, ever. Two exceptions: pass `--exec` and it'll also run your project's own real build/lint/typecheck/test commands and report what they actually said, not a guess (opt-in, off by default), and it sends one small anonymous usage signal per run (see [Usage tracking](#usage-tracking) below, opt out anytime). If it can't prove something about your code, it says so instead of guessing.
 
 ## The problem this solves
 
 AI coding agents say "done" confidently, whether or not it's true. A button gets built with no backend behind it. A backend gets built with nothing calling it. Two handlers silently claim the same route. The agent audits its own work in the same session it just wrote — and usually gives itself a passing grade, even when it shouldn't.
 
-`malveon check` reads the actual code and git history — and, for one check, actually runs your project's own commands — and reports ten things:
+`malveon check` reads the actual code and git history — and, for one opt-in check, actually runs your project's own commands — and reports ten things:
 
 - **Wiring** — does a frontend action you planned actually reach a real backend route? A miss says exactly which side is missing — backend built with no frontend, frontend built with no backend, or neither found.
 - **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
@@ -18,7 +18,7 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Hero-act** — did this session's own code introduce a known bug pattern — whether it's still sitting there right now, or got fixed along the way? Two zero-self-report signals: a git-baseline comparison (always on once a session started — catches a bug that's still live) and, if `malveon watch` was running, a captured-snapshot comparison (catches one that appeared and disappeared entirely within the session, which a single before/after diff can't see).
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
-- **Command check** — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started.
+- **Command check** *(opt-in, `--exec`)* — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started. Off by default since it can take a few minutes.
 - **Focused-test check** *(opt-in, `--focused-tests`)* — do the tests actually related to what changed this session pass, without waiting for the whole suite? Uses Jest/Vitest's own built-in `--changed` support, `pytest-picked` if you have it installed, or a coarser package-level scope for Go (clearly labeled as such). Additive evidence only — it never replaces the full test result above.
 
 Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
@@ -75,20 +75,24 @@ malveon check
 ```
 This is the real command. It reads your plan, reads your actual code and git history, and tells you what's genuinely built versus what the agent only claims. You don't have to point it at your plan file by hand, it looks for one and asks you to confirm before using it.
 
-By default, this also runs your project's own build, lint, type check, and test commands for real, and it stops with an error if anything looks broken. That's the whole point, so a bad commit never has to be caught by eye. See [Blocking a commit](#blocking-a-commit) below to actually wire that up.
+It always stops with an error if it finds something actually broken. Want it to also actually run your project's own build, lint, type check, and test commands for real (not required, but the most thorough option)? Add `--exec`:
+```bash
+malveon check --exec
+```
+This is opt-in on purpose, since it runs real commands and can take a few minutes. See [Blocking a commit](#blocking-a-commit) below for wiring any of this into an actual commit hook.
 
 ### Changing the defaults
 
 Everything above works with no extra input. If you want more control, you can add extra options (called flags) after the command:
 
 ```bash
-malveon check --features features.json --claimed-summary summary.txt --exec-timeout 5m
+malveon check --features features.json --claimed-summary summary.txt --exec --exec-timeout 5m
 ```
 
 - `--features <path>`: skip the plan file question, use this exact file.
 - `--claimed-summary <path>`: use this file instead of git commit messages, for the confidence check.
-- `--skip-exec`: don't run your build/lint/test commands at all.
-- `--exec-timeout <duration>`: change how long each command gets before malveon gives up on it (default 3 minutes). Example: `5m`, `90s`.
+- `--exec`: also run your project's own build/lint/typecheck/test commands for real (off by default).
+- `--exec-timeout <duration>`: change how long each command gets before malveon gives up on it, only relevant with `--exec` (default 3 minutes). Example: `5m`, `90s`.
 - `--no-gate`: still show the full report, but always finish successfully, even if something's wrong.
 - `--focused-tests`: also run just the tests related to what changed this session, on top of the full test run.
 
@@ -108,7 +112,7 @@ To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon neve
 malveon check --features path/to/your/plan.json
 ```
 
-Always include `--features` in a hook like this. A hook can't ask you questions interactively, so without it, the check fails right away instead of hanging while it waits for an answer. If your build and test commands already run somewhere else, like CI, add `--skip-exec` here so this hook only checks the code itself.
+Always include `--features` in a hook like this. A hook can't ask you questions interactively, so without it, the check fails right away instead of hanging while it waits for an answer. Add `--exec` here too if you also want this hook to run your project's own build/lint/typecheck/test commands for real and block on those, off by default since it can take a while.
 
 ## Usage tracking
 
