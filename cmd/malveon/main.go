@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -125,9 +126,17 @@ func runWatch(args []string) {
 // rule is actually delivered) with a pre-filled template, and the
 // tester decides whether to actually submit it.
 func runRegister() {
-	const url = "https://github.com/LadsonDavid/Malveon/discussions/new?category=q-a" +
-		"&title=" + "Custom+rule+request%3A+%5Byour+stack%5D" +
-		"&body=" + "**Framework%2Fstack%3A**+%0A%0A**What+you%27d+want+checked%3A**+%0A%0A**Link+to+the+repo+%28if+public%2C+optional%29%3A**+"
+	body := "What's your stack? (e.g. Next.js/Postgres, Django, Go/React - whatever it actually is)\n\n" +
+		"What do you want checked that malveon doesn't catch today?\n\n" +
+		"Link to the repo, if it's public - not required, just makes this easier to reason about."
+
+	u := neturl.URL{Scheme: "https", Host: "github.com", Path: "/LadsonDavid/Malveon/discussions/new"}
+	q := u.Query()
+	q.Set("category", "q-a")
+	q.Set("title", "Custom rule request")
+	q.Set("body", body)
+	u.RawQuery = q.Encode()
+	discussionURL := u.String()
 
 	fmt.Println("Want a custom check rule for your stack?")
 	fmt.Println("This opens a real GitHub Discussion — describe your framework and what you need,")
@@ -136,9 +145,9 @@ func runRegister() {
 	fmt.Println("Nothing is collected here. No email, no analytics event — the discussion only")
 	fmt.Println("exists if you write it and click submit yourself.")
 	fmt.Println()
-	fmt.Println(url)
+	fmt.Println(discussionURL)
 
-	if err := openBrowser(url); err != nil {
+	if err := openBrowser(discussionURL); err != nil {
 		fmt.Fprintf(os.Stderr, "(couldn't open a browser automatically: %v — use the link above)\n", err)
 	}
 }
@@ -284,13 +293,13 @@ func runCheck(args []string) {
 	}
 
 	decision := gate.Evaluate(gate.Input{
-		Wiring:          wiringResults,
-		Contract:        contractResults,
-		Overlap:         overlapFindings,
-		PlanAuthority:   planResult,
-		HeroPatterns:    heroReport,
-		Confidence:      confidenceReport,
-		Commands:        commandResults,
+		Wiring:               wiringResults,
+		Contract:             contractResults,
+		Overlap:              overlapFindings,
+		PlanAuthority:        planResult,
+		HeroPatterns:         heroReport,
+		Confidence:           confidenceReport,
+		Commands:             commandResults,
 		CommandsNotRequested: !*runExec,
 
 		FocusedTests:          focusedReport,
