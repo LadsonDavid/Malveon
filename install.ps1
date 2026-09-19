@@ -30,3 +30,7 @@ if ($userPath -notlike "*$installDir*") {
 
 Write-Host "Installed to $exePath"
 Write-Host "Run 'malveon' to verify (open a new terminal first if your PATH was just updated above)."
+
+Write-Host ""
+Write-Host "Want a custom check rule for your stack, or found something broken? Run 'malveon register' -"
+Write-Host "opens a real GitHub Discussion, no email or signup required."

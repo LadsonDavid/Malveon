@@ -68,3 +68,7 @@ if ! command -v malveon >/dev/null 2>&1; then
 else
   echo "Run 'malveon' to verify."
 fi
+
+echo ""
+echo "Want a custom check rule for your stack, or found something broken? Run 'malveon register' —"
+echo "opens a real GitHub Discussion, no email or signup required."
