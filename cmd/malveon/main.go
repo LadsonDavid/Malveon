@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
 	"syscall"
 
 	"github.com/LadsonDavid/beta-test/internal/checks/commands"
@@ -43,6 +45,8 @@ func main() {
 		runSession(os.Args[2:])
 	case "watch":
 		runWatch(os.Args[2:])
+	case "register":
+		runRegister()
 	default:
 		usage()
 		os.Exit(2)
@@ -73,6 +77,10 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    off by default, additive evidence only, never a substitute for the full test result.")
 	fmt.Fprintln(os.Stderr, "    check sends one anonymous usage event (OS, arch, clean/blocked — nothing about your")
 	fmt.Fprintln(os.Stderr, "    project or code); --no-telemetry or DO_NOT_TRACK=1 turns it off.")
+	fmt.Fprintln(os.Stderr, "  malveon register")
+	fmt.Fprintln(os.Stderr, "    Want a custom check rule for your stack? Opens a real GitHub Discussion where you")
+	fmt.Fprintln(os.Stderr, "    describe it and get a reply, in public, from the person who built this. No email or")
+	fmt.Fprintln(os.Stderr, "    any other contact info collected — nothing sent anywhere until you write and submit it.")
 }
 
 func runSession(args []string) {
@@ -106,6 +114,47 @@ func runWatch(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println("stopped")
+}
+
+// runRegister is the honest version of the "capture the user's identity"
+// idea a mentor proposed for this tool — see CLAUDE.md's note on why the
+// original version (a fabricated "50+ devs" number, an install-script
+// pitch nobody asked for) was rejected. This collects nothing at all:
+// no email, no name, no analytics event. It opens a real GitHub
+// Discussion (the Q&A category, so it can be marked "answered" once a
+// rule is actually delivered) with a pre-filled template, and the
+// tester decides whether to actually submit it.
+func runRegister() {
+	const url = "https://github.com/LadsonDavid/Malveon/discussions/new?category=q-a" +
+		"&title=" + "Custom+rule+request%3A+%5Byour+stack%5D" +
+		"&body=" + "**Framework%2Fstack%3A**+%0A%0A**What+you%27d+want+checked%3A**+%0A%0A**Link+to+the+repo+%28if+public%2C+optional%29%3A**+"
+
+	fmt.Println("Want a custom check rule for your stack?")
+	fmt.Println("This opens a real GitHub Discussion — describe your framework and what you need,")
+	fmt.Println("and you'll get a reply there, in public, from whoever wrote this tool.")
+	fmt.Println()
+	fmt.Println("Nothing is collected here. No email, no analytics event — the discussion only")
+	fmt.Println("exists if you write it and click submit yourself.")
+	fmt.Println()
+	fmt.Println(url)
+
+	if err := openBrowser(url); err != nil {
+		fmt.Fprintf(os.Stderr, "(couldn't open a browser automatically: %v — use the link above)\n", err)
+	}
+}
+
+// openBrowser is best-effort only: if it fails for any reason (no
+// desktop environment, unusual PATH, headless CI), the URL already
+// printed above is the real fallback, so a failure here is never fatal.
+func openBrowser(url string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Start()
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		return exec.Command("xdg-open", url).Start()
+	}
 }
 
 func runCheck(args []string) {

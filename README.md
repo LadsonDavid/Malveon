@@ -176,3 +176,9 @@ See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.
 ## Questions or feedback
 
 Using this on a stack it doesn't handle well, found a bug, or just want to say something's off? [Open a discussion](https://github.com/LadsonDavid/Malveon/discussions) — that's the one place I'm actually watching.
+
+Want a custom check rule built for your specific stack?
+```bash
+malveon register
+```
+Prints (and tries to open) a pre-filled link to a new GitHub Discussion in the Q&A category — describe your framework and what you need, and you'll get a reply there, in public. Nothing is collected: no email, no sign-up, no analytics event. The discussion only exists if you write it and submit it yourself.
