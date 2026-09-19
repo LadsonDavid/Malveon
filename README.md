@@ -2,7 +2,7 @@
 
 Checks whether an AI coding agent's claimed-done work actually matches your plan — not by asking the agent, but by reading the real code.
 
-Mostly static analysis — no server, no browser, no deployed app, ever. The one exception: it also runs your project's own real build/lint/typecheck/test commands and reports what they actually said, not a guess. If it can't prove something, it says so instead of guessing.
+Mostly static analysis — no browser, no deployed app, ever. Two exceptions: it also runs your project's own real build/lint/typecheck/test commands and reports what they actually said, not a guess, and it sends one small anonymous usage signal per run (see [Usage tracking](#usage-tracking) below, opt out anytime). If it can't prove something about your code, it says so instead of guessing.
 
 ## The problem this solves
 
@@ -109,6 +109,16 @@ malveon check --features path/to/your/plan.json
 ```
 
 Always include `--features` in a hook like this. A hook can't ask you questions interactively, so without it, the check fails right away instead of hanging while it waits for an answer. If your build and test commands already run somewhere else, like CI, add `--skip-exec` here so this hook only checks the code itself.
+
+## Usage tracking
+
+Every time `malveon check` runs, it sends one small anonymous signal: your OS, your CPU architecture, and whether the run came back clean or blocked. That's it. It never sends your code, your file names, your plan, your commit messages, or anything else about your project. It also never looks up your location, that's turned off on purpose.
+
+The only thing it remembers between runs is a random ID stored on your own machine, so two runs from you count as one person, not two. That ID isn't tied to your name, your email, or anything that could identify you.
+
+This exists so the person building malveon can see whether anyone's actually using it, since a download doesn't tell them that.
+
+Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRACK=1` in your environment (a convention plenty of other dev tools already respect) and it turns off for everything, every time, no need to remember the flag.
 
 ## The plan file
 

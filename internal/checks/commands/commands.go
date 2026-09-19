@@ -49,7 +49,8 @@ const (
 // categoryOrder fixes the run order: Build first because Typecheck (for a
 // Go stack, where type-checking is inherent to compilation, not a
 // separate step) reuses Build's already-captured result rather than
-// compiling the same package twice.
+// compiling the same package twice. --skip-exec is the flag that lets
+// the tester choose not to run any of these at all.
 var categoryOrder = []Category{Build, Lint, Typecheck, Test}
 
 type Verdict string

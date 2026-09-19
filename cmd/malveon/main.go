@@ -26,6 +26,7 @@ import (
 	"github.com/LadsonDavid/beta-test/internal/gate"
 	"github.com/LadsonDavid/beta-test/internal/report"
 	"github.com/LadsonDavid/beta-test/internal/session"
+	"github.com/LadsonDavid/beta-test/internal/telemetry"
 	"github.com/LadsonDavid/beta-test/internal/watch"
 )
 
@@ -56,6 +57,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    hero-act check has real history to check — no self-report needed. Ctrl-C to stop.")
 	fmt.Fprintln(os.Stderr, "  malveon check [--features <path>] [--root <path>] [--claimed-summary <path>]")
 	fmt.Fprintln(os.Stderr, "                [--skip-exec] [--exec-timeout <duration>] [--no-gate] [--focused-tests]")
+	fmt.Fprintln(os.Stderr, "                [--no-telemetry]")
 	fmt.Fprintln(os.Stderr, "    --features can be omitted: malveon looks for a plan file automatically,")
 	fmt.Fprintln(os.Stderr, "    and asks which one to use if more than one looks right.")
 	fmt.Fprintln(os.Stderr, "    --claimed-summary can be omitted too: the confidence check reads commit")
@@ -68,6 +70,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "    --focused-tests additionally runs tests scoped to this session's changes (Jest/Vitest's")
 	fmt.Fprintln(os.Stderr, "    own --changed support, pytest-picked if installed, or Go at package granularity) —")
 	fmt.Fprintln(os.Stderr, "    off by default, additive evidence only, never a substitute for the full test result.")
+	fmt.Fprintln(os.Stderr, "    check sends one anonymous usage event (OS, arch, clean/blocked — nothing about your")
+	fmt.Fprintln(os.Stderr, "    project or code); --no-telemetry or DO_NOT_TRACK=1 turns it off.")
 }
 
 func runSession(args []string) {
@@ -112,6 +116,7 @@ func runCheck(args []string) {
 	execTimeout := fset.Duration("exec-timeout", commands.DefaultTimeout, "hard per-command timeout for the build/lint/typecheck/test check")
 	noGate := fset.Bool("no-gate", false, "still print the full report, but always exit 0 regardless of what was found")
 	focusedTests := fset.Bool("focused-tests", false, "additionally run tests scoped to what changed this session (Jest/Vitest --changed, pytest-picked, or Go package-level) — additive only, never replaces the full test result; requires a session start")
+	noTelemetry := fset.Bool("no-telemetry", false, "don't send the anonymous check_run usage event (also respects MALVEON_NO_TELEMETRY and DO_NOT_TRACK env vars)")
 	fset.Parse(args)
 
 	if *featuresPath == "" {
@@ -240,6 +245,14 @@ func runCheck(args []string) {
 		FocusedTests:          focusedReport,
 		FocusedTestsRequested: *focusedTests,
 	})
+
+	// One anonymous check_run event, best-effort, before the report's
+	// own exit paths below — see internal/telemetry's package doc for
+	// exactly what this does and doesn't send, and the opt-outs.
+	if !telemetry.Disabled(*noTelemetry) {
+		telemetry.SendCheckRun(decision.Blocked)
+	}
+
 	if !decision.Blocked {
 		fmt.Println("GATE: clean — nothing here blocks a commit")
 		return
