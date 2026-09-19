@@ -172,3 +172,7 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 - v1 language coverage: Python, TypeScript, JavaScript, Go. Recognizes both Express-style route registrations and Next.js App Router route handlers (`route.ts` files); the older Pages Router (`pages/api/*.ts`) isn't covered yet.
 
 See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.
+
+## Questions or feedback
+
+Using this on a stack it doesn't handle well, found a bug, or just want to say something's off? [Open a discussion](https://github.com/LadsonDavid/Malveon/discussions) — that's the one place I'm actually watching.
