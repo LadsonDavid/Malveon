@@ -10,7 +10,13 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 
 `malveon check` reads the actual code and git history — and, for one opt-in check, actually runs your project's own commands — and reports ten things:
 
-- **Wiring** — does a frontend action you planned actually reach a real backend route? A miss says exactly which side is missing — backend built with no frontend, frontend built with no backend, or neither found.
+- **Plan items (wiring)** — every line of your plan gets one direct answer. malveon looks up what the line names — a URL (`/api/jobs`, `POST /api/jobs`, `/admin/digest`), a file (`PostJobModal.tsx`), or a code name in backticks (`InvitesTab`, `generate_referral_code`) — and checks it against the real code, including calls straight to Supabase (`.from()`, `.rpc()`, `.auth.*`):
+  - `WORKING` — built, and the screen actually reaches its server route (or database)
+  - `BROKEN` — built, but it won't work as written: the screen calls a URL nothing serves, or with a method the server doesn't accept
+  - `NOT BUILT` — the plan names it, the code doesn't have it
+  - `HALF BUILT` — one part exists, the other doesn't (a server route nothing calls; a component that never saves anything the line says it should)
+  - `REWRITE THIS LINE` — the line names nothing checkable ("make search better"); add the URL, file, or component it's about
+  - `SKIPPED` — not a code task: a heading, a design note, a manual step ("open the page and check"), or a build/test step (that's what `--exec` is for)
 - **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
 - **Overlap** — do two or more route registrations silently claim the same method+path? Route-precedence aware: a static/dynamic split across two Next.js route files, or a static route registered before a dynamic one in the same file, is never actually ambiguous and isn't flagged — everything else, including the frameworks where registration order genuinely does create a real dead-route bug (Express, Flask, FastAPI, gorilla/mux), stays flagged. Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
 - **Frontend overlap risk** — is an `absolute` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)? `fixed` is never flagged — it always positions against the viewport — and counts as valid context for a nested `absolute` element, matching real CSS semantics.
@@ -21,7 +27,7 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Command check** *(opt-in, `--exec`)* — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started. Off by default since it can take a few minutes.
 - **Focused-test check** *(opt-in, `--focused-tests`)* — do the tests actually related to what changed this session pass, without waiting for the whole suite? Uses Jest/Vitest's own built-in `--changed` support, `pytest-picked` if you have it installed, or a coarser package-level scope for Go (clearly labeled as such). Additive evidence only — it never replaces the full test result above.
 
-Every result is `PASS` / `FAIL` / or `NO PROOF` (or the check-specific equivalent) — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if anything came back `FAIL`, `NO PROOF`, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
+Every answer states the fact it's based on, with file:line — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if a plan line came back `BROKEN`, `NOT BUILT`, `HALF BUILT` or `REWRITE THIS LINE`, something else failed, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
 
 ## Install
 
@@ -124,6 +130,30 @@ This exists so the person building malveon can see whether anyone's actually usi
 
 Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRACK=1` in your environment (a convention plenty of other dev tools already respect) and it turns off for everything, every time, no need to remember the flag.
 
+## Use it from your AI agent (MCP)
+
+`malveon mcp` runs malveon as an MCP server, so Claude Code, Cursor, Antigravity, or any other MCP client can call the `malveon_check` tool itself and read the same report you'd see in the terminal, GATE line included. No copying output into the chat.
+
+Claude Code:
+```bash
+claude mcp add malveon -- malveon mcp
+```
+
+Cursor, Antigravity, and other clients: add this to the client's MCP config file:
+```json
+{
+  "mcpServers": {
+    "malveon": { "command": "malveon", "args": ["mcp"] }
+  }
+}
+```
+
+If more than one plan file could be the plan, malveon asks you to pick, right inside the agent's chat, instead of guessing.
+
+## Updates
+
+At most once a day, `malveon check` asks GitHub's public releases page whether a newer malveon exists. This request doesn't include anything about you or your project. If a newer version exists, it tells you, and in a real terminal it asks `Update now? [y/N]`. You can also run `malveon update` any time to get the latest release, and `malveon version` shows which version you have. Set `MALVEON_NO_UPDATE_CHECK=1` (or `DO_NOT_TRACK=1`) to turn the daily check off.
+
 ## The plan file
 
 Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename or location required (it searches the whole project tree, skipping `node_modules`/`.git`/build output). Auto-detection tries two ways:
@@ -148,20 +178,14 @@ Either way, it never assumes — even one clear match gets shown to you first: `
 
 **Plain text** (`.txt`, or anything else): one feature name per line.
 
-## Example
+## Try it
 
-Try it against the included example repo first, so you know what a working run looks like:
-
-```bash
-malveon check --root testdata/fixture --features testdata/fixture/features.json
-```
-
-Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work the same way — same four verdict shapes, different language.
+Run it on a repo where an agent just finished a task. In a folder with a plan file (a Markdown checklist is enough), `malveon check` asks which plan to use and prints one line per plan item.
 
 ## What it can't do (yet)
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
-- No server, no browser, no deployed app, ever — dynamic URLs, wrapped API clients, and templated paths report `NO PROOF`, never a guessed pass. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
+- No server, no browser, no deployed app, ever — `WORKING` means built and connected in the code, not clicked through in a running app. A URL built from a variable (`fetch(url)`) can't be matched to a route, so it never counts as evidence either way. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
 - A single fixed timeout applies to every command in the main command check rather than one tuned per category.
 - Focused-test mode (`--focused-tests`) only has real, built-in "changed" support for Jest and Vitest. Python needs `pytest-picked` already installed (pytest itself has no built-in equivalent), and its `--mode=branch` selection only sees a new test file once it's at least `git add`-ed — a truly untracked file won't be picked up yet. Go has no built-in mechanism at all, so it falls back to a coarser package-level scope (test the package containing a changed file, not the real transitive dependency graph).
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
@@ -169,9 +193,8 @@ Python and Go examples (`testdata/fixture-python`, `testdata/fixture-go`) work t
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
 - Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
 - Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
-- v1 language coverage: Python, TypeScript, JavaScript, Go. Recognizes both Express-style route registrations and Next.js App Router route handlers (`route.ts` files); the older Pages Router (`pages/api/*.ts`) isn't covered yet.
+- Frontend calls are read from JavaScript and TypeScript (including Next.js App Router pages and direct Supabase calls); backend routes from Python, Go, JavaScript/TypeScript, Rust, Java, Ruby, PHP, and C#. The older Next.js Pages Router (`pages/api/*.ts`) isn't covered yet.
 
-See `CLAUDE.md` for the full spec and the reasoning behind every scope decision.
 
 ## Questions or feedback
 
