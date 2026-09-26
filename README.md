@@ -11,12 +11,14 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 `malveon check` reads the actual code and git history — and, for one opt-in check, actually runs your project's own commands — and reports ten things:
 
 - **Plan items (wiring)** — every line of your plan gets one direct answer. malveon looks up what the line names — a URL (`/api/jobs`, `POST /api/jobs`, `/admin/digest`), a file (`PostJobModal.tsx`), or a code name in backticks (`InvitesTab`, `generate_referral_code`) — and checks it against the real code, including calls straight to Supabase (`.from()`, `.rpc()`, `.auth.*`):
-  - `WORKING` — built, and the screen actually reaches its server route (or database)
+  - `CONNECTED` — built, and the screen actually reaches its server route (or database)
   - `BROKEN` — built, but it won't work as written: the screen calls a URL nothing serves, or with a method the server doesn't accept
   - `NOT BUILT` — the plan names it, the code doesn't have it
   - `HALF BUILT` — one part exists, the other doesn't (a server route nothing calls; a component that never saves anything the line says it should)
   - `REWRITE THIS LINE` — the line names nothing checkable ("make search better"); add the URL, file, or component it's about
   - `SKIPPED` — not a code task: a heading, a design note, a manual step ("open the page and check"), or a build/test step (that's what `--exec` is for)
+
+  Every `CONNECTED` line also shows its **end-to-end path**, traced through the code (never by running it): the page it's on → the call → the server route → what that route changes. For example: `page /jobs → POST /api/jobs (PostJobModal.tsx:66) → route POST /api/jobs (route.ts:42) → inserts into table jobs (route.ts:59)`. If the line expects a change (a PUT/PATCH/DELETE call, or a POST with a word like "save" or "submit") and the route provably changes nothing, the line is `HALF BUILT`. A route that uses something malveon doesn't read (another database, an email or payment service, code it couldn't find) is never counted as "changes nothing". Data changes are recognised for Supabase only for now.
 - **Contract** — does the call agree with the route on HTTP method, and (JS/TS, literal request bodies only) does it actually send every field the handler reads off `req.body`? Shape-level only, never a claim the logic is correct.
 - **Overlap** — do two or more route registrations silently claim the same method+path? Route-precedence aware: a static/dynamic split across two Next.js route files, or a static route registered before a dynamic one in the same file, is never actually ambiguous and isn't flagged — everything else, including the frameworks where registration order genuinely does create a real dead-route bug (Express, Flask, FastAPI, gorilla/mux), stays flagged. Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
 - **Frontend overlap risk** — is an `absolute` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)? `fixed` is never flagged — it always positions against the viewport — and counts as valid context for a nested `absolute` element, matching real CSS semantics.
@@ -35,15 +37,25 @@ Pick your system, copy the one line below, paste it into a terminal, and press E
 
 **On a Mac or Linux:** open the Terminal app, then run:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.sh | sh
+curl -fsSL https://get.malveon.com/install.sh | sh
 ```
 
 **On Windows:** open PowerShell, then run:
 ```powershell
-irm https://raw.githubusercontent.com/LadsonDavid/Malveon/main/install.ps1 | iex
+irm https://get.malveon.com/install.ps1 | iex
 ```
 
 That downloads the right file for your computer and sets it up so you can just type `malveon` from any folder, from now on. On a Mac, it also clears the security warning new downloads normally get, so your first run isn't blocked.
+
+Every download is checked before it's installed: the file must match the release's checksum list, and that list must be signed with malveon's release key (the Mac/Linux script checks the signature when OpenSSL 3 is installed; `malveon update` always checks it). A file that doesn't match is refused, nothing is installed.
+
+**Other ways to install** (same signed files):
+
+| | |
+|---|---|
+| npm (any OS with Node 16+) | `npm install -g malveon` |
+| Homebrew (Mac, Linux) | `brew tap ladsondavid/malveon https://github.com/LadsonDavid/Malveon` then `brew install malveon` |
+| Scoop (Windows) | `scoop bucket add malveon https://github.com/LadsonDavid/Malveon` then `scoop install malveon` |
 
 Now close your terminal window and open a brand new one. This step actually matters: your current terminal doesn't know about the change yet, only a new one will. Then type:
 ```bash
@@ -67,7 +79,7 @@ Three commands. Run the first one before the agent starts, the second one while 
 ```bash
 malveon session start
 ```
-Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against.
+Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against. If you've set up [prompt checking](#check-your-prompts-too-not-just-plan-docs), skip this step: your first prompt does it for you.
 
 **2. (Optional, but worth doing) Watch your code while the agent works:**
 ```bash
@@ -115,20 +127,29 @@ To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon neve
 ```bash
 #!/bin/sh
 # save as .git/hooks/pre-commit, then run: chmod +x .git/hooks/pre-commit
-malveon check --features path/to/your/plan.json
+malveon check
 ```
 
-Always include `--features` in a hook like this. A hook can't ask you questions interactively, so without it, the check fails right away instead of hanging while it waits for an answer. Add `--exec` here too if you also want this hook to run your project's own build/lint/typecheck/test commands for real and block on those, off by default since it can take a while.
+This needs a committed [`malveon.json`](#keep-the-checks-with-your-repo-malveonjson) naming your plan file. A hook can't answer questions, so without one the check stops right away instead of hanging while it waits for an answer (or pass `--features path/to/plan.md` in the hook instead). With `"exec": true` in `malveon.json`, the hook also runs your project's own build/lint/typecheck/test commands and blocks on a failure.
 
 ## Usage tracking
 
-Every time `malveon check` runs, it sends one small anonymous signal: your OS, your CPU architecture, and whether the run came back clean or blocked. That's it. It never sends your code, your file names, your plan, your commit messages, or anything else about your project. It also never looks up your location, that's turned off on purpose.
+malveon sends small anonymous signals so the person building it can see whether anyone actually uses it (a download doesn't say that). Each one carries your OS, CPU type and malveon's version, plus:
+
+| Signal | When | Also includes |
+|---|---|---|
+| first run | the first time malveon runs on a machine | nothing else |
+| check | each `malveon check`, from the terminal, your editor or your AI agent | clean or blocked, whether your build/tests ran, how many of your prompts were captured, and the name your agent or editor gives itself |
+| command | `update`, `session`, `watch`, `register`, `hooks`, `prompt` | the command's name |
+| agent connected / tool used | an AI agent or the editor connects to `malveon mcp` | the agent's or editor's own name, the tool's name |
+| update | an update is offered, installed or fails | the two version numbers, and a one-word reason if it failed |
+| error | a check can't run | a one-word kind, never the message |
+
+It never sends your code, file names, plan, prompts, commit messages, error messages, or anything else about your project, and never looks up your location (turned off on purpose). Typing a prompt to your agent never sends anything. Downloads made through `get.malveon.com` (the install scripts, `malveon update`, npm) are counted there too: which file and where it was downloaded from, nothing about you.
 
 The only thing it remembers between runs is a random ID stored on your own machine, so two runs from you count as one person, not two. That ID isn't tied to your name, your email, or anything that could identify you.
 
-This exists so the person building malveon can see whether anyone's actually using it, since a download doesn't tell them that.
-
-Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRACK=1` in your environment (a convention plenty of other dev tools already respect) and it turns off for everything, every time, no need to remember the flag.
+Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRACK=1` in your environment (a convention plenty of other dev tools already respect) and it turns off for everything, every time, including under the editor extension. In VS Code, turning off the editor's own telemetry setting turns malveon's signals off too.
 
 ## Use it from your AI agent (MCP)
 
@@ -149,6 +170,24 @@ Cursor, Antigravity, and other clients: add this to the client's MCP config file
 ```
 
 If more than one plan file could be the plan, malveon asks you to pick, right inside the agent's chat, instead of guessing.
+
+## Check your prompts too, not just plan docs
+
+Most of what you ask an agent for never makes it into a plan doc. malveon can check your prompts as well:
+
+```bash
+malveon hooks install
+```
+
+Run it once, in a terminal, inside your project. It finds which agents this project uses (Claude Code, Codex, Cursor, Antigravity), shows you exactly what it will add to each one's settings, and only writes after you say yes. From then on:
+
+- Every prompt you type is saved word for word to `.malveon/prompts.jsonl` in your project. It comes from your editor's own hook, never from the agent. The folder is ignored by git, and nothing about your prompts is ever sent anywhere.
+- Your first prompt starts a session by itself, so you don't need `malveon session start` any more. A check that comes back clean ends the session, and your next prompt starts a new one.
+- Through the MCP tool, the agent says what each prompt asked for, one checkable line at a time: "`GET /api/search` is served and called from `SearchBar.tsx`". malveon checks every line against your code, exactly like a plan line. What the agent says is only a list of things to check, never proof. Each line must name a URL, file, or code name and be about what you actually asked, and once recorded it can't be edited or removed.
+- The report gets a new section, "Your prompts vs the code," with one answer per prompt: CONNECTED, BROKEN, NOT BUILT, HALF BUILT, NOT TRANSLATED (the agent never said what it asked for), NOT A CODE TASK (the agent's word, listed for you to review), or SKIPPED (a short reply like "yes"). Any prompt with an answer from the code also lists your words that none of the agent's lines mention, so you can spot a request that got quietly dropped.
+- If you cancel something ("actually, drop the search box"), the agent can only propose withdrawing the earlier prompt. You confirm it, either when malveon asks you in the agent's chat or with `malveon prompt drop <number>` in a terminal.
+
+Codex asks you to approve the new hook once, with `/hooks` inside Codex.
 
 ## Updates
 
@@ -178,14 +217,67 @@ Either way, it never assumes — even one clear match gets shown to you first: `
 
 **Plain text** (`.txt`, or anything else): one feature name per line.
 
-## Try it
+## Keep the checks with your repo (`malveon.json`)
 
-Run it on a repo where an agent just finished a task. In a folder with a plan file (a Markdown checklist is enough), `malveon check` asks which plan to use and prints one line per plan item.
+Commit a `malveon.json` at your project root and every run uses the same gate: you in a terminal, your agent over MCP, a fresh session, or a commit hook. The first time you pick a plan file, malveon offers to write it for you.
+
+```json
+{
+  "plans": ["docs/PLAN.md"],
+  "exec": true,
+  "focused_tests": false
+}
+```
+
+- `plans`: your plan file(s), relative to the project root.
+- `exec`: also run your project's own build, lint, typecheck and test commands, and block on a failure (`true` in a new file).
+- `focused_tests`: also run only the tests related to what changed this session.
+
+A flag you pass on the command line (`--features`, `--exec=false`) always wins over the file.
+
+## What the output looks like
+
+A real run on a small example project: a plan with four lines, a frontend in `frontend/`, a server in `backend/`. Two lines are built and connected; two are broken in ways an agent could easily call "done".
+
+```text
+$ malveon check
+OVERVIEW
+==============================================================================
+  read from the code ✔ · your build/tests: not run (turn on "exec" in malveon.json, or pass --exec) · your real app: not verified (malveon never runs it)
+
+  Plan items built & connected       2 CONNECTED · 2 BROKEN · 0 NOT BUILT · 0 HALF BUILT · 0 REWRITE · 0 SKIPPED
+  Frontend & backend agree on data   2 MATCH · 0 MISMATCH
+  Backend route conflicts            clean
+  Unplanned code                     clean
+  New bugs this session              clean
+  Unfinished code (TODOs)            clean
+  Build, lint & tests actually ran   not run (pass --exec to include)
+
+Plan items — built and connected? (wiring check)
+------------------------------------------------------------------------------
+BROKEN (2) — built, but it won't work as written: fix these first
+  Cancel order calls `/cancel-order`
+    the frontend calls /cancel-order (frontend/app.js:8), but no server route handles it
+    evidence: frontend/app.js:8
+  Update settings via `PUT /settings`
+    the server has /settings, but no PUT handler for it (it accepts POST)
+    evidence: backend/settings.js:3
+
+CONNECTED (2) — built and connected in the code
+  Refund button sends `POST /refund` — POST /refund reaches its server route
+    path: page not traced (malveon finds Next.js App Router pages only) → POST /refund (frontend/app.js:3) → route POST /refund (backend/server.js:3) → no data change malveon can see — it reads Supabase database calls only
+  ...
+
+GATE: blocked — a commit gated on this run should not proceed
+  - plan items: 2 BROKEN, 0 NOT BUILT, 0 HALF BUILT, 0 REWRITE THIS LINE
+```
+
+Some sections are shortened here (`...`). The first line keeps three states apart: what was read from the code, whether your own build and tests actually ran and passed, and your real app, which malveon never runs. `CONNECTED` is only ever the first of those. The run exits with code 1 because the gate is blocked, which is what stops a commit hook.
 
 ## What it can't do (yet)
 
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
-- No server, no browser, no deployed app, ever — `WORKING` means built and connected in the code, not clicked through in a running app. A URL built from a variable (`fetch(url)`) can't be matched to a route, so it never counts as evidence either way. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
+- No server, no browser, no deployed app, ever — `CONNECTED` means built and connected in the code, not clicked through in a running app. A URL built from a variable (`fetch(url)`) can't be matched to a route, so it never counts as evidence either way. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
 - A single fixed timeout applies to every command in the main command check rather than one tuned per category.
 - Focused-test mode (`--focused-tests`) only has real, built-in "changed" support for Jest and Vitest. Python needs `pytest-picked` already installed (pytest itself has no built-in equivalent), and its `--mode=branch` selection only sees a new test file once it's at least `git add`-ed — a truly untracked file won't be picked up yet. Go has no built-in mechanism at all, so it falls back to a coarser package-level scope (test the package containing a changed file, not the real transitive dependency graph).
 - Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
@@ -193,8 +285,13 @@ Run it on a repo where an agent just finished a task. In a folder with a plan fi
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
 - Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
 - Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
+- Prompt checking only sees prompts typed after `malveon hooks install`, and only covers Claude Code, Codex, Cursor, and Antigravity. Antigravity doesn't hand its hook the prompt text, so malveon reads it from Antigravity's conversation log, whose format isn't documented and could change; if it can't be read, the report says so. A line the agent writes can be real and pass while still asking for less than you did; the "not covered" note points at that, but you make the call.
 - Frontend calls are read from JavaScript and TypeScript (including Next.js App Router pages and direct Supabase calls); backend routes from Python, Go, JavaScript/TypeScript, Rust, Java, Ruby, PHP, and C#. The older Next.js Pages Router (`pages/api/*.ts`) isn't covered yet.
 
+
+## License
+
+Malveon is closed-source and free to use during the beta, for personal and commercial work — see [LICENSE](LICENSE). Later versions may come with different terms (including fees or limits); the version you already have keeps the terms it shipped with.
 
 ## Questions or feedback
 
@@ -204,4 +301,4 @@ Want a custom check rule built for your specific stack?
 ```bash
 malveon register
 ```
-Prints (and tries to open) a pre-filled link to a new GitHub Discussion in the Q&A category — describe your framework and what you need, and you'll get a reply there, in public. Nothing is collected: no email, no sign-up, no analytics event. The discussion only exists if you write it and submit it yourself.
+Prints (and tries to open) a pre-filled link to a new GitHub Discussion in the Q&A category — describe your framework and what you need, and you'll get a reply there, in public. No email, no sign-up: the discussion only exists if you write it and submit it yourself. (Like every command, it sends one anonymous usage event naming the command; see [Usage tracking](#usage-tracking).)

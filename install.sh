@@ -38,14 +38,58 @@ if [ "$platform" = "linux" ] && [ "$goarch" = "arm64" ]; then
 fi
 
 asset="malveon-${platform}-${goarch}"
-url="https://github.com/${REPO}/releases/latest/download/${asset}"
+GITHUB="${MALVEON_RELEASE_URL:-https://github.com/${REPO}/releases/latest/download}"   # overridable only for testing
+COUNTER="${MALVEON_COUNTER_URL:-https://get.malveon.com/latest}"   # counts the download, then forwards to GitHub
+
+# malveon's release key (public half). Every release's SHA256SUMS is signed
+# with its private half, which never leaves the maintainer's machine.
+PUBKEY_PEM="-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAQys7kKGp7MivUG53NwXgYScQSmHHIcpNU/xBh/yUVzs=
+-----END PUBLIC KEY-----"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+tmp="$work/$asset"
 
 echo "Downloading ${asset}..."
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-if ! curl -fsSL "$url" -o "$tmp"; then
+if ! curl -fsSL "${COUNTER}/${asset}?src=install.sh" -o "$tmp" 2>/dev/null &&
+   ! curl -fsSL "${GITHUB}/${asset}" -o "$tmp"; then
   echo "malveon: download failed — check https://github.com/${REPO}/releases for available builds" >&2
   exit 1
+fi
+
+# Verify before installing anything: the checksum list comes straight from
+# GitHub (never through the counter), and the binary must match it.
+if ! curl -fsSL "${GITHUB}/SHA256SUMS" -o "$work/SHA256SUMS" ||
+   ! curl -fsSL "${GITHUB}/SHA256SUMS.sig" -o "$work/SHA256SUMS.sig"; then
+  echo "malveon: this release has no signed checksum list — not installing it" >&2
+  exit 1
+fi
+want=$(grep " ${asset}\$" "$work/SHA256SUMS" | cut -d' ' -f1)
+if command -v sha256sum >/dev/null 2>&1; then
+  got=$(sha256sum "$tmp" | cut -d' ' -f1)
+elif command -v shasum >/dev/null 2>&1; then
+  got=$(shasum -a 256 "$tmp" | cut -d' ' -f1)
+else
+  echo "malveon: no sha256sum or shasum on this machine to verify the download — not installing it" >&2
+  exit 1
+fi
+if [ -z "$want" ] || [ "$got" != "$want" ]; then
+  echo "malveon: the download doesn't match the release's checksum — not installing it" >&2
+  exit 1
+fi
+# The signature proves the checksum list itself came from malveon's
+# maintainer. It needs OpenSSL 3; without it, say plainly what was checked.
+if openssl version 2>/dev/null | grep -q "^OpenSSL 3"; then
+  printf '%s\n' "$PUBKEY_PEM" > "$work/key.pem"
+  openssl base64 -d -A -in "$work/SHA256SUMS.sig" -out "$work/sig.bin"
+  if ! openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$work/SHA256SUMS" -sigfile "$work/sig.bin" >/dev/null 2>&1; then
+    echo "malveon: the release's checksum list isn't signed with malveon's release key — not installing it" >&2
+    exit 1
+  fi
+  echo "Verified: checksum and signature match."
+else
+  echo "Verified: checksum matches (signature not checked — that needs OpenSSL 3; 'malveon update' checks it from now on)."
 fi
 chmod +x "$tmp"
 
