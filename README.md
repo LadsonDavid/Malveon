@@ -130,7 +130,7 @@ To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon neve
 malveon check
 ```
 
-This needs a committed [`malveon.json`](#keep-the-checks-with-your-repo-malveonjson) naming your plan file. A hook can't answer questions, so without one the check stops right away instead of hanging while it waits for an answer (or pass `--features path/to/plan.md` in the hook instead). With `"exec": true` in `malveon.json`, the hook also runs your project's own build/lint/typecheck/test commands and blocks on a failure.
+This needs a committed [`malveon.json`](#keep-the-checks-with-your-repo-malveonjson) naming your plan file. A hook can't answer questions, so without one the check stops right away instead of hanging while it waits for an answer (or pass `--features path/to/plan.md` in the hook instead). With `"exec": true` in `malveon.json`, the hook also runs your project's own build/lint/typecheck/test commands and blocks on a failure. Run `malveon trust` once in the repo first (see below): a hook can't ask you, so until you've approved the commands it skips them and blocks, saying why.
 
 ## Usage tracking
 
@@ -234,6 +234,8 @@ Commit a `malveon.json` at your project root and every run uses the same gate: y
 - `focused_tests`: also run only the tests related to what changed this session.
 
 A flag you pass on the command line (`--features`, `--exec=false`) always wins over the file.
+
+**malveon only runs a repo's commands after you approve them.** `malveon.json` comes with the repo, so a repo you just cloned could ask malveon to run anything its `package.json` or `Makefile` says. The first time a repo's `malveon.json` turns commands on, malveon shows you exactly which commands would run and asks; your answer is remembered for that repo on this machine until its `malveon.json` changes. `malveon trust` approves them up front (needed for a commit hook), and your AI agent's checks ask you through your editor instead of running them unasked. Passing `--exec` yourself needs no approval: you typed it.
 
 ## What the output looks like
 
