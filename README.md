@@ -79,7 +79,7 @@ Three commands. Run the first one before the agent starts, the second one while 
 ```bash
 malveon session start
 ```
-Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against. If you've set up [prompt checking](#check-your-prompts-too-not-just-plan-docs), skip this step: your first prompt does it for you.
+Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against. If you've set up [prompt checking](#check-your-prompts-too-not-just-plan-docs), skip this step: your first prompt does it for you. Forgot? `malveon check` starts one for you and says so; it then covers changes from that moment on (including ones not committed yet), but not work the agent already committed before it.
 
 **2. (Optional, but worth doing) Watch your code while the agent works:**
 ```bash
@@ -121,6 +121,8 @@ Skip any flag you don't need. Nothing breaks, that part of the report just expla
 By default, `malveon check` fails (technically: exits with a non-zero status) if it finds something broken, something it can't prove either way, or a check that couldn't run at all. Every report ends with a plain `GATE: clean` or `GATE: blocked` line, naming exactly why.
 
 A few things never block on their own: code flagged as "not in your plan," unfinished-code markers, and frontend layout risks. Those are meant for a human to glance at, not proof of a real bug.
+
+Plan work you haven't ticked yet doesn't block either. A `- [ ]` line that's NOT BUILT, HALF BUILT or too vague is just not done yet: it's still checked and listed, marked "not ticked in your plan yet, so it doesn't block". A `- [x]` line (the plan says it's done) or a plain `- item` line blocks when the code disagrees, and BROKEN always blocks, ticked or not. Likewise with `--exec`, a command your project doesn't define (no `test` script, say) is reported but doesn't block, as long as something else ran; and a prompt you typed only blocks once your AI agent has been asked to say what it meant and hasn't.
 
 To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon never sets this up for you, here's how to do it yourself:
 
@@ -193,6 +195,21 @@ Codex asks you to approve the new hook once, with `/hooks` inside Codex.
 
 At most once a day, `malveon check` asks GitHub's public releases page whether a newer malveon exists. This request doesn't include anything about you or your project. If a newer version exists, it tells you, and in a real terminal it asks `Update now? [y/N]`. You can also run `malveon update` any time to get the latest release, and `malveon version` shows which version you have. Set `MALVEON_NO_UPDATE_CHECK=1` (or `DO_NOT_TRACK=1`) to turn the daily check off.
 
+## Uninstall
+
+Remove malveon the same way you installed it:
+
+| Installed with | Remove with |
+|---|---|
+| `curl … install.sh` | `sudo rm /usr/local/bin/malveon` (or wherever `MALVEON_INSTALL_DIR` pointed) |
+| `irm … install.ps1` | delete `%LOCALAPPDATA%\malveon`, then remove that folder from your user `Path` |
+| npm | `npm uninstall -g malveon` |
+| Homebrew | `brew uninstall malveon`, then `brew untap ladsondavid/malveon` |
+| Scoop | `scoop uninstall malveon`, then `scoop bucket rm malveon` |
+| VS Code / Cursor | uninstall the malveon extension from the Extensions view |
+
+Then delete the folder malveon keeps in your home directory, `~/.malveon` (on Windows `%USERPROFILE%\.malveon`): the downloaded program (npm and the extension), the anonymous ID, repos you approved, and the update-check cache. In a project you checked, `.malveon/` holds that project's session and captured prompts; delete it too. If you ran `malveon hooks install`, remove the malveon entry from `.claude/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json` or `.agents/hooks.json`.
+
 ## The plan file
 
 Whatever format you already keep your plan in — no fixed shape forced on you, and no particular filename or location required (it searches the whole project tree, skipping `node_modules`/`.git`/build output). Auto-detection tries two ways:
@@ -214,6 +231,10 @@ Either way, it never assumes — even one clear match gets shown to you first: `
 - [ ] Refund button
 - [x] Cancel order
 ```
+
+Tick a box (`- [x]`) when the plan says that item is done: then malveon blocks if the code disagrees. Unticked items (`- [ ]`) are checked too, but they don't block until you tick them (unless what's there is broken).
+
+The more precise a line, the more precise the answer. "Refund button" gets NOT BUILT if nothing in the code mentions refunds, and "rewrite this line" if some code does but malveon can't tell which. Naming the URL, file or component (`` `POST /api/refunds` ``, `` `RefundButton` ``) lets it check exactly that. Any common URL placeholder style works: `:id`, `[id]`, `<id>`, `{id}`.
 
 **Plain text** (`.txt`, or anything else): one feature name per line.
 
