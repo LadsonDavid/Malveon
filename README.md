@@ -309,7 +309,9 @@ Some sections are shortened here (`...`). The first line keeps three states apar
 - Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
 - Frontend overlap risk (both Tailwind and plain CSS) is file-scoped rather than tracing the real JSX/selector ancestor chain — no CSS specificity/cascade resolution.
 - Prompt checking only sees prompts typed after `malveon hooks install`, and only covers Claude Code, Codex, Cursor, and Antigravity. Antigravity doesn't hand its hook the prompt text, so malveon reads it from Antigravity's conversation log, whose format isn't documented and could change; if it can't be read, the report says so. A line the agent writes can be real and pass while still asking for less than you did; the "not covered" note points at that, but you make the call.
-- Frontend calls are read from JavaScript and TypeScript (including Next.js App Router pages and direct Supabase calls); backend routes from Python, Go, JavaScript/TypeScript, Rust, Java, Ruby, PHP, and C#. The older Next.js Pages Router (`pages/api/*.ts`) isn't covered yet.
+- Frontend calls are read from JavaScript and TypeScript (including Next.js App Router pages and direct Supabase calls); backend routes from Python, Go, JavaScript/TypeScript, Rust, Java, Ruby, PHP, and C#. The Next.js Pages Router (`pages/api/*.ts`) and `[...slug]` routes are covered.
+- Routes are followed through the mounts malveon can see: Express `app.use('/api', router)` (also nested, and through `import`/`require`), FastAPI `APIRouter(prefix=…)`/`include_router`, and Flask blueprints. A router malveon never sees mounted is matched by the end of the URL and the report says its prefix is unverified. A mount built from a variable or a function call isn't followed.
+- A handler that only returns 500/501 or raises "not implemented" is reported as half built; this is read from short handlers only. Whether a longer handler works is beyond what reading the code can show.
 
 
 ## License

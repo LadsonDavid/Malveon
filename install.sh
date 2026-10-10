@@ -79,17 +79,28 @@ if [ -z "$want" ] || [ "$got" != "$want" ]; then
   exit 1
 fi
 # The signature proves the checksum list itself came from malveon's
-# maintainer. It needs OpenSSL 3; without it, say plainly what was checked.
-if openssl version 2>/dev/null | grep -q "^OpenSSL 3"; then
-  printf '%s\n' "$PUBKEY_PEM" > "$work/key.pem"
-  openssl base64 -d -A -in "$work/SHA256SUMS.sig" -out "$work/sig.bin"
-  if ! openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$work/SHA256SUMS" -sigfile "$work/sig.bin" >/dev/null 2>&1; then
+# maintainer. It needs OpenSSL 3. macOS ships LibreSSL, which can't check it,
+# so Homebrew's OpenSSL 3 is used when it's installed. Without either, say
+# plainly what was and wasn't checked.
+OPENSSL=""
+for candidate in openssl /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl; do
+  if "$candidate" version 2>/dev/null | grep -q "^OpenSSL 3"; then
+    OPENSSL="$candidate"
+    break
+  fi
+done
+if [ -n "$OPENSSL" ]; then
+  printf '%s
+' "$PUBKEY_PEM" > "$work/key.pem"
+  "$OPENSSL" base64 -d -A -in "$work/SHA256SUMS.sig" -out "$work/sig.bin"
+  if ! "$OPENSSL" pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin -in "$work/SHA256SUMS" -sigfile "$work/sig.bin" >/dev/null 2>&1; then
     echo "malveon: the release's checksum list isn't signed with malveon's release key — not installing it" >&2
     exit 1
   fi
   echo "Verified: checksum and signature match."
 else
-  echo "Verified: checksum matches (signature not checked — that needs OpenSSL 3; 'malveon update' checks it from now on)."
+  echo "Verified: checksum matches. The signature was NOT checked: that needs OpenSSL 3 (macOS: 'brew install openssl@3', then run this again)."
+  echo "  'malveon update' checks the signature from now on."
 fi
 chmod +x "$tmp"
 
