@@ -23,11 +23,10 @@ AI coding agents say "done" confidently, whether or not it's true. A button gets
 - **Overlap** — do two or more route registrations silently claim the same method+path? Route-precedence aware: a static/dynamic split across two Next.js route files, or a static route registered before a dynamic one in the same file, is never actually ambiguous and isn't flagged — everything else, including the frameworks where registration order genuinely does create a real dead-route bug (Express, Flask, FastAPI, gorilla/mux), stays flagged. Also flags when one of the colliding registrations sits inside a function that's never referenced anywhere else in the codebase — a real signal it might be dead code, not just a guess.
 - **Frontend overlap risk** — is an `absolute` element (Tailwind class or plain CSS `position:` declaration) sitting with no positioning context anywhere in its file (a structural risk signal, not a claim two things visually collide — confirming that needs a real render, which this deliberately doesn't do)? `fixed` is never flagged — it always positions against the viewport — and counts as valid context for a nested `absolute` element, matching real CSS semantics.
 - **Not-in-plan** — did the agent build something this session that your plan never asked for?
-- **Hero-act** — did this session's own code introduce a known bug pattern — whether it's still sitting there right now, or got fixed along the way? Two zero-self-report signals: a git-baseline comparison (always on once a session started — catches a bug that's still live) and, if `malveon watch` was running, a captured-snapshot comparison (catches one that appeared and disappeared entirely within the session, which a single before/after diff can't see).
+- **New bugs this session** — did the agent's own work this session break something that worked, or add a known bug pattern? Compared with the code at the session start, read from git and the code (never from the agent): a call from your screen that reached a route then and goes nowhere now, a new call to a URL nothing serves, or a known bug pattern added to a file (an empty `catch`, a leftover `debugger`/`.only`, a hard-coded secret, a swallowed Go error, a bare Python `except`). Everything it finds is a live problem and blocks.
 - **Incompleteness** — does the code itself admit it's unfinished (`TODO`/`FIXME`/`HACK`/`XXX`/"not implemented" left in a file changed this session)? A marker's presence is real, code-only proof; its absence proves nothing, so this can never substitute for the confidence check below.
 - **Confidence** — does the agent's own "it works" claim actually match what got verified? Reads it straight from commit messages, nothing to ask or paste.
 - **Command check** *(opt-in, `--exec`)* — do your project's own build/lint/typecheck/test commands actually pass right now? The one check that runs real subprocesses instead of reading the code graph — a Makefile target, a `package.json` script, Go's own toolchain, or whatever Python tooling is on your `PATH`, whichever the project already defines. Nothing invented, nothing guessed, no server or browser ever started. Off by default since it can take a few minutes.
-- **Focused-test check** *(opt-in, `--focused-tests`)* — do the tests actually related to what changed this session pass, without waiting for the whole suite? Uses Jest/Vitest's own built-in `--changed` support, `pytest-picked` if you have it installed, or a coarser package-level scope for Go (clearly labeled as such). Additive evidence only — it never replaces the full test result above.
 
 Every answer states the fact it's based on, with file:line — never a guess dressed up as an answer. By default, `malveon check` also exits non-zero if a plan line came back `BROKEN`, `NOT BUILT`, `HALF BUILT` or `REWRITE THIS LINE`, something else failed, or a check couldn't run at all — see [Blocking a commit](#blocking-a-commit) below.
 
@@ -73,7 +72,7 @@ On Windows: downloading the `.exe` by itself is not enough to make `malveon` wor
 
 ## How to use it
 
-Three commands. Run the first one before the agent starts, the second one while it works, and the third one after it says it's done.
+Two commands. Run the first one before the agent starts and the second one after it says it's done.
 
 **1. Save a snapshot of your code, right before the agent starts:**
 ```bash
@@ -81,13 +80,7 @@ malveon session start
 ```
 Run this from inside your project's own folder. It just remembers what your code looked like before the agent touched anything, so later checks have something real to compare against. If you've set up [prompt checking](#check-your-prompts-too-not-just-plan-docs), skip this step: your first prompt does it for you. Forgot? `malveon check` starts one for you and says so; it then covers changes from that moment on (including ones not committed yet), but not work the agent already committed before it.
 
-**2. (Optional, but worth doing) Watch your code while the agent works:**
-```bash
-malveon watch
-```
-Leave this running in its own terminal window. Press Ctrl+C to stop it once the agent is finished. Skipping this step is fine, one check (catching a bug the agent introduces and then quietly fixes) just works a little less thoroughly without it. Everything else still works.
-
-**3. After the agent says it's done, check what actually got built:**
+**2. After the agent says it's done, check what actually got built:**
 ```bash
 malveon check
 ```
@@ -104,15 +97,13 @@ This is opt-in on purpose, since it runs real commands and can take a few minute
 Everything above works with no extra input. If you want more control, you can add extra options (called flags) after the command:
 
 ```bash
-malveon check --features features.json --claimed-summary summary.txt --exec --exec-timeout 5m
+malveon check --features features.json --exec --exec-timeout 5m
 ```
 
 - `--features <path>`: skip the plan file question, use this exact file.
-- `--claimed-summary <path>`: use this file instead of git commit messages, for the confidence check.
 - `--exec`: also run your project's own build/lint/typecheck/test commands for real (off by default).
 - `--exec-timeout <duration>`: change how long each command gets before malveon gives up on it, only relevant with `--exec` (default 3 minutes). Example: `5m`, `90s`.
 - `--no-gate`: still show the full report, but always finish successfully, even if something's wrong.
-- `--focused-tests`: also run just the tests related to what changed this session, on top of the full test run.
 
 Skip any flag you don't need. Nothing breaks, that part of the report just explains it was skipped and why.
 
@@ -142,7 +133,7 @@ malveon sends small anonymous signals so the person building it can see whether 
 |---|---|---|
 | first run | the first time malveon runs on a machine | nothing else |
 | check | each `malveon check`, from the terminal, your editor or your AI agent | clean or blocked, whether your build/tests ran, how many of your prompts were captured, and the name your agent or editor gives itself |
-| command | `update`, `session`, `watch`, `register`, `hooks`, `prompt` | the command's name |
+| command | `update`, `session`, `register`, `hooks`, `prompt` | the command's name |
 | agent connected / tool used | an AI agent or the editor connects to `malveon mcp` | the agent's or editor's own name, the tool's name |
 | update | an update is offered, installed or fails | the two version numbers, and a one-word reason if it failed |
 | error | a check can't run | a one-word kind, never the message |
@@ -175,7 +166,7 @@ If more than one plan file could be the plan, malveon asks you to pick, right in
 
 ## Check your prompts too, not just plan docs
 
-Most of what you ask an agent for never makes it into a plan doc. malveon can check your prompts as well:
+Most of what you ask an agent for never makes it into a plan doc. malveon can check your prompts as well. You don't have to find a command for it: the first `malveon check` in a project that has an agent's folder (`.claude`, `.cursor`, ...) asks once, in the terminal or as a dialog in your editor, shows exactly what it would add, and sets it up on a yes. A no is remembered and never asked again. To set it up yourself later:
 
 ```bash
 malveon hooks install
@@ -245,14 +236,12 @@ Commit a `malveon.json` at your project root and every run uses the same gate: y
 ```json
 {
   "plans": ["docs/PLAN.md"],
-  "exec": true,
-  "focused_tests": false
+  "exec": true
 }
 ```
 
 - `plans`: your plan file(s), relative to the project root.
 - `exec`: also run your project's own build, lint, typecheck and test commands, and block on a failure (`true` in a new file).
-- `focused_tests`: also run only the tests related to what changed this session.
 
 A flag you pass on the command line (`--features`, `--exec=false`) always wins over the file.
 
@@ -302,8 +291,7 @@ Some sections are shortened here (`...`). The first line keeps three states apar
 - Doesn't prove business logic is *correct* — only that the wiring and HTTP method agree.
 - No server, no browser, no deployed app, ever — `CONNECTED` means built and connected in the code, not clicked through in a running app. A URL built from a variable (`fetch(url)`) can't be matched to a route, so it never counts as evidence either way. The command check runs your project's own already-defined build/lint/typecheck/test commands (nothing invented), but that's still not a live/deployed run.
 - A single fixed timeout applies to every command in the main command check rather than one tuned per category.
-- Focused-test mode (`--focused-tests`) only has real, built-in "changed" support for Jest and Vitest. Python needs `pytest-picked` already installed (pytest itself has no built-in equivalent), and its `--mode=branch` selection only sees a new test file once it's at least `git add`-ed — a truly untracked file won't be picked up yet. Go has no built-in mechanism at all, so it falls back to a coarser package-level scope (test the package containing a changed file, not the real transitive dependency graph).
-- Hero-act only catches a small, named catalog of known bug patterns — not a general "was this a real bug" judgment, which isn't resolvable from static snapshots alone. And it only works if `malveon watch` was actually running; if it crashed or was never started, that section reports itself unavailable rather than guessing from a possibly-incomplete recording.
+- The new-bugs check only knows a small, named catalog of bug patterns plus one structural comparison (calls that stopped reaching a route) — not a general "was this a real bug" judgment, which can't be settled from static code. It needs a session start and a git repository to compare against.
 - Incompleteness is one-directional — a marker's presence is real proof, but its absence proves nothing (most finished code has none either). Never a substitute for the confidence check.
 - Overlap's reachability note is a best-effort heuristic (checks whether an enclosing function's name is ever mentioned elsewhere in the codebase), not real call-graph analysis — an anonymous handler or dead code it can't attribute to a named function still just counts as a plain registration.
 - Contract's field-agreement check is JS/TS only, and only fires when both sides are a literal object (no spread, no variable) — Python/Go request bodies and response-shape comparison aren't covered yet.
