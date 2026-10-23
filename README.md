@@ -1,4 +1,4 @@
-# malveon check
+# Malveon check
 
 **Your AI says "done." malveon reads the code and tells you what is actually true.**
 
