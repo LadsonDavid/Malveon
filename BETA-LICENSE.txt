@@ -1,0 +1,45 @@
+Malveon Beta License
+
+Copyright (c) 2026 LadsonDavid. All rights reserved.
+
+Malveon is closed-source software, offered free of charge during its beta.
+By installing or using it, you agree to these terms.
+
+1. What you may do
+   You may download, install, and use this version of Malveon, for free, on
+   your own machines, to check your own projects or your employer's or
+   clients' projects, for personal or commercial work.
+
+2. What you may not do
+   - Share, sell, rent, or redistribute Malveon, or offer it as a hosted
+     service, except by pointing people to the official download.
+   - Reverse engineer, decompile, or disassemble it, except where the law
+     allows this regardless of these terms.
+   - Remove or change this license or any copyright notice.
+
+3. Your code stays yours
+   Malveon runs on your machine and reads your project there. It never sends
+   your code, file names, plans, or prompts anywhere. It sends a small set of
+   anonymous usage events, described in the README, which you can turn off
+   with --no-telemetry or the DO_NOT_TRACK environment variable.
+
+4. This is a beta
+   Malveon may change, stop working, or stop being offered at any time.
+   Future versions may come with different terms, including fees or usage
+   limits. Those terms apply only to the versions they ship with; the
+   version you already have stays under the terms it came with.
+
+5. Ending this license
+   This license ends automatically if you break these terms. When it ends,
+   stop using Malveon and delete your copies.
+
+6. No warranty
+   Malveon is provided "as is", without warranty of any kind, express or
+   implied, including fitness for a particular purpose. Its results are
+   checks, not guarantees: always review your own code before relying on it.
+
+7. Limit of liability
+   To the fullest extent the law allows, LadsonDavid is not liable for any
+   damages arising from using or being unable to use Malveon.
+
+Questions: https://github.com/LadsonDavid/Malveon/discussions

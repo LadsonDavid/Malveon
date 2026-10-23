@@ -401,9 +401,32 @@ Every answer states the fact it's based on, with file:line — never a guess dre
 - A handler that only returns 500/501 or raises "not implemented" is reported as half built; this is read from short handlers only. Whether a longer handler works is beyond what reading the code can show.
 
 
+## Open source: what you can read, and what you can't
+
+The part of malveon that decides most plan-line verdicts is open source under the Apache License 2.0, so you can check the claims on this page against the code.
+
+| Part | Where | Status |
+|---|---|---|
+| Code map: reads your routes, requests, pages, imports and database calls (`extractor`, `graph`, `skipdirs`) | [`pkg/`](pkg) | Open, Apache-2.0 |
+| Plan reading (`features`) | [`pkg/features`](pkg/features) | Open, Apache-2.0 |
+| The plan-items check: CONNECTED, BROKEN, NOT BUILT, HALF BUILT, SKIPPED (`wiring`) | [`pkg/wiring`](pkg/wiring) | Open, Apache-2.0 |
+| Everything else in the `malveon` program: new bugs, agent's words, weakened tests, unplanned code, prompts, the gate and hooks, the report, MCP server, updates, telemetry | not published | Closed. Free to use during the beta under [BETA-LICENSE.txt](BETA-LICENSE.txt) |
+
+What this means: the downloadable `malveon` program is built from the open packages plus the closed ones. It is not built from this repository alone, and the release binaries are built and signed outside it. So you can audit how a plan line becomes a verdict, but you cannot rebuild the whole program from this source. The closed checks keep their limits documented above.
+
+To run the open tests:
+
+```bash
+go test ./...
+```
+
+`go test -short ./...` skips one timing test that is slow on loaded machines.
+
 ## License
 
-Malveon is closed-source and free to use during the beta, for personal and commercial work — see [LICENSE](LICENSE). Later versions may come with different terms (including fees or limits); the version you already have keeps the terms it shipped with.
+The Go source under [`pkg/`](pkg) and [`testdata/`](testdata) is licensed under the [Apache License 2.0](LICENSE).
+
+The downloadable `malveon` program also contains closed code. It is free to use during the beta, for personal and commercial work, under the [Malveon Beta License](BETA-LICENSE.txt). Later versions may come with different terms (including fees or limits); the version you already have keeps the terms it shipped with.
 
 ## Questions or feedback
 
