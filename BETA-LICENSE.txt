@@ -2,8 +2,15 @@ Malveon Beta License
 
 Copyright (c) 2026 LadsonDavid. All rights reserved.
 
-Malveon is closed-source software, offered free of charge during its beta.
-By installing or using it, you agree to these terms.
+This license covers the compiled `malveon` program you download from Releases.
+The source code in `pkg/` and `testdata/` is not covered by it: that code is
+licensed separately under the Apache License 2.0 (see LICENSE), and nothing
+here limits your rights under that license.
+
+The program is partly open source. It includes the Apache-2.0 code above plus
+closed code that is not published. It is offered free of charge during its
+beta. The restrictions below apply to the program as a whole and to the
+closed code. By installing or using the program, you agree to these terms.
 
 1. What you may do
    You may download, install, and use this version of Malveon, for free, on

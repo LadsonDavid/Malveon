@@ -424,9 +424,12 @@ go test ./...
 
 ## License
 
-The Go source under [`pkg/`](pkg) and [`testdata/`](testdata) is licensed under the [Apache License 2.0](LICENSE).
+**Two licenses, one repo.**
 
-The downloadable `malveon` program also contains closed code. It is free to use during the beta, for personal and commercial work, under the [Malveon Beta License](BETA-LICENSE.txt). Later versions may come with different terms (including fees or limits); the version you already have keeps the terms it shipped with.
+- **Source code** in `pkg/` and `testdata/`: Apache License 2.0. Use it, change it, redistribute it. See [LICENSE](LICENSE).
+- **The `malveon` program** you download: free to use during the beta, including for commercial work. It contains the open code above plus closed code. See [BETA-LICENSE.txt](BETA-LICENSE.txt).
+
+Later versions may come with different terms. The version you already have keeps the terms it shipped with.
 
 ## Questions or feedback
 
