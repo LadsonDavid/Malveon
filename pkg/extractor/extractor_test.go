@@ -171,7 +171,7 @@ func TestPlanCheckSignals(t *testing.T) {
 		}
 	}
 
-	if s, ok := nextPageSite(`src\app\(app)\circles\[id]\page.tsx`); !ok || s.argRaw != `"/circles/:id"` {
+	if s, ok := nextPageSite(filepath.Join("src", "app", "(app)", "circles", "[id]", "page.tsx")); !ok || s.argRaw != `"/circles/:id"` {
 		t.Errorf("page site = %+v, %v; want /circles/:id", s, ok)
 	}
 
