@@ -51,11 +51,13 @@ It reads code. It never opens a browser, starts your app or checks a deployed si
 
 ## Start in two minutes
 
-1. [Install it](#install) (one line in a terminal).
-2. In your project, run `malveon check`. It finds your plan file and asks you to confirm it. No plan? [Here is what one looks like](#the-plan-file). A plain checklist works.
-3. Read the top of the report. Fix what's under "FIX THESE FIRST."
+You don't need a plan, a session or any setup for the first look.
 
-Using VS Code or Cursor? Search "malveon" in Extensions and the same report shows up beside your code.
+1. In your project's folder, run `npx malveon scan` (no install; [or install it](#install) and run `malveon scan`). It lists buttons that do nothing, calls to addresses nothing serves and imports that can't work, in seconds, and changes nothing.
+2. Just had an AI work on the project? Run `malveon review`. It checks the commits it made, using their messages as what you asked for, and says what it added that nothing asked for, what it broke and what it left unfinished.
+3. To have every task checked from now on, run `malveon hooks install` once. Or give malveon a plan: `malveon check` finds your plan file and asks you to confirm it ([what a plan looks like](#the-plan-file); a plain checklist works).
+
+Using VS Code or Cursor? Search "malveon" in Extensions. The command "Malveon: Scan this project" does step 1, and the same report as `malveon check` shows up beside your code.
 
 ## Install
 
@@ -99,7 +101,18 @@ On Windows: downloading the `.exe` by itself is not enough to make `malveon` wor
 
 ## How to use it
 
-Two commands. Run the first one before the agent starts and the second one after it says it's done.
+**No plan yet? Start here.** Two commands need nothing set up:
+
+```bash
+malveon scan      # what's wrong in the project right now
+malveon review    # what your AI just did, from the commits it made
+```
+
+`malveon scan` reads the whole project and lists the faults that need no plan or session to see: a button with no click handler (or an empty one), a call to an address none of your routes serves, an import of a file or name that doesn't exist, a route that only answers "not implemented". It shows the first three (`--all` for every one) and one next step. It writes nothing into your project and always exits 0: it's a look, not a gate. Each kind is judged only where malveon can be sure (see [Every check, in detail](#every-check-in-detail)), so a short list is not a clean bill of health: the report says what it did not judge.
+
+`malveon review` takes a git ref (default `HEAD~1`, the commit before the last one) and checks everything committed since it, plus uncommitted changes, the way a session would have: what was added that nothing asked for, what broke, tests removed, work left unfinished, and what the commit messages claim that the code doesn't back up. There was no plan or prompt, so your commit messages stand in for what you asked for: a weak stand-in, and the report says so. `malveon review HEAD~5` looks further back, `--full` prints the whole report. It borrows the session file while it runs and puts yours back exactly as it was.
+
+**With a plan or prompts, the full loop.** Two commands. Run the first one before the agent starts and the second one after it says it's done.
 
 **1. Save a snapshot of your code, right before the agent starts:**
 ```bash
@@ -162,10 +175,11 @@ malveon sends small anonymous signals so the person building it can see whether 
 |---|---|---|
 | first run | the first time malveon runs on a machine | nothing else |
 | check | each `malveon check`, from the terminal, your editor or your AI agent | clean or blocked, whether your build/tests ran, how many of your prompts were captured, and the name your agent or editor gives itself |
+| scan / review | each `malveon scan` or `malveon review`, from the terminal, your editor or your AI agent | how many problems it found (a number, never what they were), how many commits a review looked at, how long it took, and whether `malveon check` fell back to a scan because you had no plan |
 | command | `update`, `session`, `register`, `hooks`, `prompt`, `trust` | the command's name |
 | agent connected / tool used | an AI agent or the editor connects to `malveon mcp` | the agent's or editor's own name, the tool's name |
 | update | an update is offered, installed or fails | the two version numbers, and a one-word reason if it failed |
-| error | a check can't run | a one-word kind, never the message |
+| error | a check, scan or review can't run | a one-word kind, never the message |
 
 It never sends your code, file names, plan, prompts, commit messages, error messages, or anything else about your project, and never looks up your location (turned off on purpose). Typing a prompt to your agent never sends anything. Downloads made through `get.malveon.com` (the install scripts, `malveon update`, npm) are counted there too: which file and where it was downloaded from, nothing about you.
 
@@ -175,7 +189,7 @@ Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRAC
 
 ## Use it from your AI agent (MCP)
 
-`malveon mcp` runs malveon as an MCP server, so Claude Code, Cursor, Antigravity, or any other MCP client can call the `malveon_check` tool itself and read the same report you'd see in the terminal, GATE line included. No copying output into the chat.
+`malveon mcp` runs malveon as an MCP server, so Claude Code, Cursor, Antigravity, or any other MCP client can call the `malveon_check` tool itself and read the same report you'd see in the terminal, GATE line included. No copying output into the chat. The `malveon_scan` tool does the plan-free scan, so an agent can look at a project nobody has set up yet.
 
 Claude Code:
 ```bash
@@ -357,6 +371,12 @@ The summary near the top is the short version. This is every check, with its exa
 
 `malveon check` reads the actual code and git history, and for one opt-in check actually runs your project's own commands. It reports these things:
 
+- **Scan** *(`malveon scan`, needs no plan, session or setup)* — four kinds of fault, each judged only where malveon can be sure, so a short list is expected:
+  - *Dead button*: a `<button>` or `<Button>` in JSX/TSX with visible text and no click handler, or one that is an empty function. Not judged: an icon-only button, a file with spread props or a framework attribute (`hx-post`, `@click`), a button just under a link, a label, a dialog or menu trigger or `asChild` (the element around it may handle the click), and stories and tests.
+  - *Broken import*: a relative import of a file that doesn't exist, or of a plain name the file doesn't export. Not judged: a package or alias (`@acme/core`, `@/x`), an asset, a path through a build-output folder, a file that re-exports names malveon can't list (`export *`, `export type *`), and anything not JavaScript or TypeScript.
+  - *Call to nowhere*: a plain `fetch`/`axios`/SWR call with the address written out in quotes, to an address no route in the same app serves with that method. Judged only in an app (the nearest folder with a manifest) that has other routes under the same first path segment: `/api/missing` beside `/api/items` is a typo or a route nobody wrote, while `/v1/chat/completions` beside no `/v1` routes is another service. A call through a helper (`ghGet(token, '/repos/...')`) isn't judged.
+  - *Unfinished route*: a JavaScript, TypeScript, Python or Go handler that only answers with an error or "not implemented" (sometimes on purpose: the report says what it saw, not that it's wrong).
+  It lists the three most certain first (dead buttons, then imports, then calls, then routes). Run on four real projects it found 2 problems in a 320-file app (both dead buttons, checked by hand), 5 in a 1,071-file monorepo (all stale imports of files that no longer exist), 3 in a 2,504-file monorepo (two stale imports, one deliberate 501) and none in an 84-file app. Its first version listed 51 problems on the 1,071-file monorepo, nearly all wrong; every restriction above is one of those.
 - **Plan items (wiring)** — every line of your plan gets one direct answer. malveon looks up what the line names — a URL (`/api/jobs`, `POST /api/jobs`, `/admin/digest`), a file (`PostJobModal.tsx`), or a code name in backticks (`InvitesTab`, `generate_referral_code`) — and checks it against the real code, including calls straight to Supabase (`.from()`, `.rpc()`, `.auth.*`), Prisma (`prisma.post.create()`, `$queryRaw`) and Drizzle (`db.insert(posts)`):
   - `CONNECTED` — built, and the screen actually reaches its server route (or database)
   - `BROKEN` — built, but it won't work as written: the screen calls a URL nothing serves, or with a method the server doesn't accept

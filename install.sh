@@ -121,7 +121,7 @@ echo "Installed to $dest"
 if ! command -v malveon >/dev/null 2>&1; then
   echo "$INSTALL_DIR isn't on your PATH yet — add it, or run malveon directly: $dest"
 else
-  echo "Run 'malveon' to verify."
+  echo "Next: open your project's folder and run 'malveon scan' (it needs no setup)."
 fi
 
 echo ""
