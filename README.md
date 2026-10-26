@@ -185,8 +185,6 @@ It never sends your code, file names, plan, prompts, commit messages, error mess
 
 The only thing it remembers between runs is a random ID stored on your own machine, so two runs from you count as one person, not two. That ID isn't tied to your name, your email, or anything that could identify you.
 
-Don't want this at all? Add `--no-telemetry` to any command, or set `DO_NOT_TRACK=1` in your environment (a convention plenty of other dev tools already respect) and it turns off for everything, every time, including under the editor extension. In VS Code, turning off the editor's own telemetry setting turns malveon's signals off too.
-
 ## Use it from your AI agent (MCP)
 
 `malveon mcp` runs malveon as an MCP server, so Claude Code, Cursor, Antigravity, or any other MCP client can call the `malveon_check` tool itself and read the same report you'd see in the terminal, GATE line included. No copying output into the chat. The `malveon_scan` tool does the plan-free scan, so an agent can look at a project nobody has set up yet.
@@ -306,6 +304,7 @@ Commit a `malveon.json` at your project root and every run uses the same gate: y
 
 - `plans`: your plan file(s), relative to the project root.
 - `exec`: also run your project's own build, lint, typecheck and test commands, and block on a failure (`true` in a new file).
+- `exclude` (optional): folder names every check skips, anywhere in the project, the way `node_modules` already is: `"exclude": ["generated", "old-docs"]`. On the command line: `--exclude generated` (repeatable) for `malveon scan` and `malveon check`. Folder names only; a path like `src/old` is refused with a message, not guessed at. A single file can't be excluded yet.
 
 A flag you pass on the command line (`--features`, `--exec=false`) always wins over the file.
 
