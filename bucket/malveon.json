@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.5/malveon-windows-amd64.exe#/malveon.exe",
-            "hash": "4ee883d8bd711aefd4880220be5619cb85070229270698845d099e97a4e8d029"
+            "hash": "a2617c25a5817586f2c2c16aef4694932b31bb381180ca71379d31e2ba240f6f"
         }
     },
     "bin": "malveon.exe",

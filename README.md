@@ -47,7 +47,7 @@ Want it to hold the AI back while something is proven wrong? There is an optiona
 
 ## What it doesn't do
 
-It reads code. It never opens a browser, starts your app or checks a deployed site, so `CONNECTED` means built and connected in the code, not clicked through. It doesn't prove your business logic is right. Two things go beyond reading: `--exec` (opt-in) runs your project's own build, lint, type-check and test commands and reports what they really said, and malveon sends small anonymous usage signals (see [Usage tracking](#usage-tracking); you can turn it off). Full list: [What it can't do (yet)](#what-it-cant-do-yet).
+It reads code. It never opens a browser, starts your app or checks a deployed site, so `CONNECTED` means built and connected in the code, not clicked through. It doesn't prove your business logic is right. Two things go beyond reading: `--exec` (opt-in) runs your project's own build, lint, type-check and test commands and reports what they really said, and malveon sends small anonymous usage signals (see [Usage tracking](#usage-tracking)). Full list: [What it can't do (yet)](#what-it-cant-do-yet).
 
 ## Start in two minutes
 

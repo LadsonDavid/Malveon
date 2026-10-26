@@ -8,18 +8,18 @@ class Malveon < Formula
   on_macos do
     on_arm do
       url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.5/malveon-darwin-arm64"
-      sha256 "c3e580039e7063d17ef72e9960399cf3cd9700fc715e546e3bb99fd750855f73"
+      sha256 "36eb8b8047db1ea894daf83e9a3b8c803c39ec85730eececaf36d43b509c9194"
     end
     on_intel do
       url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.5/malveon-darwin-amd64"
-      sha256 "0fccd7c38b5c9a02c9fa4e05044009f9010a6e88011751cf6e5160fb662cadc3"
+      sha256 "7ce57f5e6f8b022801f749639411a8aee0a4dc9b3276b6d3ca5d703856253435"
     end
   end
 
   on_linux do
     on_intel do
       url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.5/malveon-linux-amd64"
-      sha256 "0f59e78d9d6fc918077fd65c71532f67948f82d30b93fcd622092d4042344127"
+      sha256 "210ea6099f9ef46b8379d6ee8bac8b2e78a3a6760d4d8c4bdd9a9289b879854d"
     end
   end
 
