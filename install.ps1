@@ -63,3 +63,8 @@ Write-Host "Next: open a new terminal in your project's folder and run 'malveon 
 Write-Host ""
 Write-Host "Want a custom check rule for your stack, or found something broken? Run 'malveon register' -"
 Write-Host "opens a real GitHub Discussion, no email or signup required."
+
+# A per-user task checks every six hours even when the editor is closed.
+# Signed updates activate only when participating checks are idle.
+& $exePath updates enable
+if ($LASTEXITCODE -ne 0) { Write-Warning "Automatic updates could not be enabled. Run 'malveon updates enable' later." }
