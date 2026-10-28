@@ -176,7 +176,7 @@ func Extract(root string) (*graph.Graph, error) {
 	rp.apply(g)
 	// Last, so every kind of call node (fetch, tRPC callers, templates, Go) is covered.
 	for i := range g.Nodes {
-		if g.Nodes[i].Kind == graph.NetworkCall && isTestFile(g.Nodes[i].File) {
+		if isTestFile(g.Nodes[i].File) {
 			g.Nodes[i].InTest = true
 		}
 	}
@@ -191,6 +191,9 @@ func isTestFile(rel string) bool { return IsTestFile(rel) }
 
 // IsTestFile reports whether a file follows a test naming convention (see above).
 func IsTestFile(rel string) bool {
+	if graph.SourceRole(rel) != "production" {
+		return true
+	}
 	parts := strings.Split(strings.ToLower(filepath.ToSlash(rel)), "/")
 	for _, dir := range parts[:len(parts)-1] {
 		if dir == "__tests__" || dir == "cypress" || dir == "e2e" {

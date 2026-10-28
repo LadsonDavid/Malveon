@@ -20,8 +20,9 @@ import (
 )
 
 type Feature struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Citations []string `json:"citations,omitempty"` // Source-column text; retained, never demanded as a local file.
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
 	// Source is where the line came from: "path:line" for Markdown and
 	// plain-text plans, the path alone for JSON plans (that format has no
 	// lines). Lets an editor point at the exact plan line.
@@ -42,7 +43,10 @@ type Feature struct {
 
 	// TableRow is true for a line read from a Markdown table row. A row that
 	// names no URL, file or code name is a table of notes or values, not a task.
-	TableRow bool `json:"-"`
+	TableRow  bool   `json:"-"`
+	Context   string `json:"context,omitempty"`
+	EndLine   int    `json:"end_line,omitempty"`
+	Reference bool   `json:"reference,omitempty"`
 }
 
 // Words returns the feature's name split into lowercase tokens for
@@ -313,6 +317,8 @@ func namesURLOrFile(name string) bool {
 func Classify(f Feature) (skip bool, reason string) {
 	name := strings.TrimSpace(f.Name)
 	switch {
+	case f.Reference:
+		return true, "an external reference, not a requested local implementation"
 	case f.TableRow && !namesURLOrFile(name):
 		return true, "a table row that names no URL, file or code name — a table of notes or values, not a task"
 	case headingPattern.MatchString(name) || strings.HasSuffix(name, ":"):
@@ -590,13 +596,54 @@ func parseChecklistLines(text string) []planLine { return parseChecklist(text, t
 func parseChecklist(text string, tables bool) []planLine {
 	var out []planLine
 	lines := strings.Split(text, "\n")
+	var headings []string
+	active, indent := -1, 0
+	fence := false
+	var sourceColumns []int
 	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			fence = !fence
+			active = -1
+			continue
+		}
+		if fence {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			level := len(trimmed) - len(strings.TrimLeft(trimmed, "#"))
+			if level <= 6 && len(trimmed) > level && trimmed[level] == ' ' {
+				for len(headings) < level {
+					headings = append(headings, "")
+				}
+				headings = headings[:level]
+				headings[level-1] = strings.TrimSpace(trimmed[level:])
+				active = -1
+				sourceColumns = nil
+				continue
+			}
+		}
+		context := strings.Join(headings, " / ")
+		reference := referenceHeading.MatchString(context)
 		if m := checklistItemPattern.FindStringSubmatch(line); m != nil {
 			name := strings.TrimSpace(m[2])
 			if name != "" {
-				out = append(out, planLine{name: name, line: i + 1, unticked: m[1] == " "})
+				out = append(out, planLine{name: name, line: i + 1, end: i + 1, unticked: m[1] == " ", context: context, reference: reference && !explicitDeliverable.MatchString(name)})
+				active = len(out) - 1
+				indent = len(line) - len(strings.TrimLeft(line, " \t"))
 			}
 			continue
+		}
+		// A table's declared Source column is provenance, independently of the
+		// wording of its heading. Keep it for model review, but not as a local task anchor.
+		if tables && tableRowPattern.MatchString(line) && i+1 < len(lines) && tableSepPattern.MatchString(lines[i+1]) {
+			sourceColumns = nil
+			for col, label := range strings.Split(strings.Trim(trimmed, "|"), "|") {
+				switch strings.ToLower(strings.TrimSpace(label)) {
+				case "source", "sources", "citation", "citations", "reference", "references":
+					sourceColumns = append(sourceColumns, col)
+				}
+			}
 		}
 		// A plan written as a table: each row is a line (found 2026-10-12: every
 		// row was dropped without a word). The header row, the row right above the
@@ -604,17 +651,37 @@ func parseChecklist(text string, tables bool) []planLine {
 		if tables && tableRowPattern.MatchString(line) && !tableSepPattern.MatchString(line) &&
 			!(i+1 < len(lines) && tableSepPattern.MatchString(lines[i+1])) {
 			if name, unticked := tableRowText(line); name != "" {
-				out = append(out, planLine{name: name, line: i + 1, unticked: unticked, table: true})
+				var citations []string
+				cells := strings.Split(strings.Trim(trimmed, "|"), "|")
+				for _, col := range sourceColumns {
+					if col < len(cells) {
+						citations = append(citations, strings.TrimSpace(cells[col]))
+					}
+				}
+				out = append(out, planLine{name: name, line: i + 1, end: i + 1, unticked: unticked, table: true, context: context, reference: reference && !explicitDeliverable.MatchString(name), citations: citations})
 			}
+			active = -1
+			continue
+		}
+		if !tableRowPattern.MatchString(line) {
+			sourceColumns = nil
+		}
+		if active >= 0 && trimmed != "" && len(line)-len(strings.TrimLeft(line, " \t")) > indent {
+			out[active].name += " " + trimmed
+			out[active].end = i + 1
+		} else if trimmed != "" {
+			active = -1
 		}
 	}
 	return out
 }
 
 var (
-	tableRowPattern = regexp.MustCompile(`^\s*\|.+\|\s*$`)
-	tableSepPattern = regexp.MustCompile(`^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$`)
-	rowNumberCell   = regexp.MustCompile(`^#?\d*\.?$`)
+	referenceHeading    = regexp.MustCompile(`(?i)\b(?:prior art|external references|references|sources|inspiration)\b`)
+	explicitDeliverable = regexp.MustCompile("(?i)^(?:\\*\\*)?(?:add|create|implement|build|remove|delete|fix)\\b")
+	tableRowPattern     = regexp.MustCompile(`^\s*\|.+\|\s*$`)
+	tableSepPattern     = regexp.MustCompile(`^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$`)
+	rowNumberCell       = regexp.MustCompile(`^#?\d*\.?$`)
 )
 
 // statusCells are the cells of a plan table that say how far a task is, not
@@ -650,10 +717,14 @@ func tableRowText(row string) (text string, unticked bool) {
 
 // planLine is one plan item's text and its 1-based line number.
 type planLine struct {
-	name     string
-	line     int
-	unticked bool // a "- [ ]" checklist box
-	table    bool // read from a table row
+	name      string
+	line      int
+	unticked  bool // a "- [ ]" checklist box
+	table     bool // read from a table row
+	end       int
+	context   string
+	reference bool
+	citations []string
 }
 
 // parsePlainTextLines treats every non-empty, non-comment line as one
@@ -679,7 +750,7 @@ func withGeneratedIDs(path string, lines []planLine) []Feature {
 		if n := seen[id]; n > 1 {
 			id = fmt.Sprintf("%s-%d", id, n)
 		}
-		fs = append(fs, Feature{ID: id, Name: l.name, Source: fmt.Sprintf("%s:%d", path, l.line), Unticked: l.unticked, TableRow: l.table})
+		fs = append(fs, Feature{ID: id, Name: l.name, Source: fmt.Sprintf("%s:%d", path, l.line), Unticked: l.unticked, TableRow: l.table, Context: l.context, EndLine: l.end, Reference: l.reference, Citations: l.citations})
 	}
 	return fs
 }

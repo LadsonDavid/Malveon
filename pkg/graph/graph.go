@@ -61,7 +61,7 @@ type Node struct {
 	Receiver      string     // Python route: the router variable it hangs on (bp, router), for following where that router is mounted
 	Stub          bool       // RouteHandler whose handler is short and only answers with an error (500/501, "not implemented")
 	Unreferenced  bool       // NetworkCall inside a function nothing in the project calls: not a call anyone makes
-	InTest        bool       // NetworkCall in a test file (foo.test.ts, __tests__/, *_test.go, test_*.py, cypress/, e2e/): the tests call it, the app doesn't
+	InTest        bool       // Node in a test or fixture file (foo.test.ts, __tests__/, *_test.go, test_*.py, cypress/, e2e/): the tests call it, the app doesn't
 	Unmounted     bool       // RouteHandler in a router file nothing was seen mounting: its real URL is unknown, so it isn't compared with other files' routes
 	Op            string     // DataCall only: the method chained right after .from(...) ("select", "insert", "upload"), or the auth method; "" if not chained directly
 	FileRouted    bool       // the URL comes from where the file sits (Next.js, Nuxt, SvelteKit, Remix, Astro), and the framework picks a static segment over a dynamic one whatever the order
@@ -74,11 +74,12 @@ type Node struct {
 // project import (./x, @/x) that matched no scanned file has File "" and
 // the module text in Missing — code malveon can't read.
 type Import struct {
-	Name    string
-	File    string
-	Missing string
-	Spec    string // the module text as written: './lib/format'
-	Line    int    // the line of the import statement
+	TypeOnly bool // Erased by TypeScript: not a runtime integration or effect.
+	Name     string
+	File     string
+	Missing  string
+	Spec     string // the module text as written: './lib/format'
+	Line     int    // the line of the import statement
 }
 
 // ExportSet is what a JavaScript or TypeScript file exports. Open means the names
@@ -531,7 +532,7 @@ func (g *Graph) MentionsWord(w string) bool {
 // still has no screens.
 func (g *Graph) HasFrontend() bool {
 	for _, n := range g.Nodes {
-		if (n.Kind == NetworkCall && !n.InTest) || n.Kind == Page {
+		if !n.InTest && (n.Kind == NetworkCall || n.Kind == Page) {
 			return true
 		}
 	}
@@ -606,7 +607,7 @@ func (g *Graph) TestCallsTo(path string) []Node {
 func (g *Graph) literalNodes(kind Kind, keep func(Node) bool) []Node {
 	var out []Node
 	for _, n := range g.Nodes {
-		if kind == NetworkCall && (n.Unreferenced || n.InTest) {
+		if n.InTest || (kind == NetworkCall && n.Unreferenced) {
 			continue // a call in dead code, or in a test, is not a call the app makes
 		}
 		if n.Kind == kind && n.Confidence == Extracted && keep(n) {

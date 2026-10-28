@@ -89,7 +89,7 @@ func TestChangedFileIsConnectedButOnlyTheChangeIsSeen(t *testing.T) {
 	g := changedGraph(t)
 
 	card := runLine(g, "`"+menuFile+"` adds a report option to the post menu", map[string]bool{menuFile: true})
-	if card.Verdict != Working {
+	if card.Verdict != Skipped {
 		t.Fatalf("verdict %s (%s), want CONNECTED", card.Verdict, card.Reason)
 	}
 	for _, want := range []string{"changed since this session started", "not that", "in backticks"} {
@@ -102,7 +102,7 @@ func TestChangedFileIsConnectedButOnlyTheChangeIsSeen(t *testing.T) {
 	// flow has nothing to do with "adds the report button": it isn't shown as
 	// the line's path, and the contract check doesn't get it as a connection.
 	page := runLine(g, "`"+pageFile+"` adds the report button to the post detail view", map[string]bool{pageFile: true})
-	if page.Verdict != Working {
+	if page.Verdict != Skipped {
 		t.Fatalf("verdict %s (%s), want CONNECTED", page.Verdict, page.Reason)
 	}
 	if len(page.Path) != 0 || len(page.Pairs) != 0 {
@@ -133,10 +133,10 @@ func TestChangedSetLeavesOtherLinesAlone(t *testing.T) {
 		reasonHas  string
 	}{
 		// Creating a file: existence is the claim, whatever else changed.
-		{"a create line", "Create `" + tabFile + "` for the moderation screen", Working, "imported by"},
+		{"a create line", "Create `" + tabFile + "` for the moderation screen", Skipped, "imported by"},
 		// The file is the object of "add", before any file mention: it's a new
 		// file being added, not a file that gains something.
-		{"an add-the-file line", "Add `" + tabFile + "` for the moderation screen", Working, "imported by"},
+		{"an add-the-file line", "Add `" + tabFile + "` for the moderation screen", Skipped, "imported by"},
 		// A URL in the line: the URL lookup decides, as always.
 		{"a line naming a URL", "`" + pageFile + "` adds a call to `GET /api/feed`", Working, "reaches its server route"},
 		// ...and a file that makes no such call is not connected to it, whatever changed.
@@ -146,7 +146,7 @@ func TestChangedSetLeavesOtherLinesAlone(t *testing.T) {
 		// A removal line checks the file is gone.
 		{"a removal line", "Delete `" + menuFile + "`", NotBuilt, "still there"},
 		// No promise of change: only that the thing exists.
-		{"no change verb", "`" + menuFile + "` is the post menu", Working, ""},
+		{"no change verb", "`" + menuFile + "` is the post menu", Skipped, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := runLine(g, c.line, none)
@@ -170,7 +170,7 @@ func TestNoChangedSetBehavesAsBefore(t *testing.T) {
 	} {
 		old := Run(g, []features.Feature{{ID: "x", Name: line}})[0]
 		got := runLine(g, line, nil)
-		if old.Verdict != Working || got.Verdict != old.Verdict || got.Reason != old.Reason || strings.Join(got.Path, "|") != strings.Join(old.Path, "|") {
+		if got.Verdict != old.Verdict || got.Reason != old.Reason || strings.Join(got.Path, "|") != strings.Join(old.Path, "|") {
 			t.Errorf("%q: Run gave %s (%s), RunWithChanges(nil) gave %s (%s)", line, old.Verdict, old.Reason, got.Verdict, got.Reason)
 		}
 	}

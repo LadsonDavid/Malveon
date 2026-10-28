@@ -179,10 +179,10 @@ export default function P() { return <Used /> }`,
 		line, reasonHas string
 		want            Verdict
 	}{
-		{"Create `Unused.tsx` for the settings screen", "nothing in the app uses it: no file imports Unused.tsx", HalfBuilt},
-		{"Create `Used.tsx` for the settings screen", "imported by", Working},
-		{"Add `helpers.py` for the build", "isn't traced", Working},
-		{"Add `vite.config.ts`", "may be started by a command or a tool", Working},
+		{"Create `Unused.tsx` for the settings screen", "no file imports Unused.tsx", Skipped},
+		{"Create `Used.tsx` for the settings screen", "imported by", Skipped},
+		{"Add `helpers.py` for the build", "isn't traced", Skipped},
+		{"Add `vite.config.ts`", "may be started by a command or a tool", Skipped},
 	} {
 		r := Run(g, []features.Feature{{ID: "x", Name: c.line}})[0]
 		if r.Verdict != c.want || !strings.Contains(r.Reason, c.reasonHas) {

@@ -25,9 +25,10 @@ var (
 )
 
 type rawImport struct {
-	name string // name as defined in the imported file; "" = the whole file
-	spec string // the module text as written: './x', '@/lib/y'
-	line int    // the line of the import statement
+	typeOnly bool
+	name     string // name as defined in the imported file; "" = the whole file
+	spec     string // the module text as written: './x', '@/lib/y'
+	line     int    // the line of the import statement
 }
 
 func scanJSImports(src string) []rawImport {
@@ -52,6 +53,7 @@ func scanJSImports(src string) []rawImport {
 			ln := lines.lineOf(src, idx[0])
 			for _, ri := range importedNames(m[1], m[2]) {
 				ri.line = ln
+				ri.typeOnly = ri.typeOnly || regexp.MustCompile(`^(?:import|export)\s+type\s`).MatchString(strings.TrimSpace(m[0]))
 				out = append(out, ri)
 			}
 		}
@@ -89,7 +91,7 @@ func importedNames(clause, spec string) []rawImport {
 	for _, part := range strings.Split(named, ",") {
 		fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(part), "type "))
 		if len(fields) > 0 && fields[0] != "default" {
-			out = append(out, rawImport{name: fields[0], spec: spec})
+			out = append(out, rawImport{name: fields[0], spec: spec, typeOnly: strings.HasPrefix(strings.TrimSpace(part), "type ")})
 		} else if len(fields) > 0 {
 			sawDefault = true // `default as X`: the file's default export, the whole file
 		}
@@ -125,9 +127,9 @@ func resolveImports(g *graph.Graph, raw map[string][]rawImport, info *jsInfo) {
 			target, ok := firstFile(bySlash, bases)
 			switch {
 			case ok && target != file:
-				g.Imports[file] = append(g.Imports[file], graph.Import{Name: im.name, File: target, Spec: im.spec, Line: im.line})
+				g.Imports[file] = append(g.Imports[file], graph.Import{TypeOnly: im.typeOnly, Name: im.name, File: target, Spec: im.spec, Line: im.line})
 			case !ok && project:
-				g.Imports[file] = append(g.Imports[file], graph.Import{Name: im.name, Missing: im.spec, Spec: im.spec, Line: im.line})
+				g.Imports[file] = append(g.Imports[file], graph.Import{TypeOnly: im.typeOnly, Name: im.name, Missing: im.spec, Spec: im.spec, Line: im.line})
 			}
 		}
 	}

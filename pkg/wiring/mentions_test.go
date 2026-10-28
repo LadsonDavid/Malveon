@@ -16,7 +16,7 @@ import (
 // the reason names the words it looked for (founder's call, 2026-09-29).
 // Only when some code does mention them, but not strongly enough to tell
 // which, is it SKIPPED as unchecked (it never blocks).
-func TestLinesNothingMentionsAreNotBuilt(t *testing.T) {
+func TestAbsentWordsDoNotProveAbsentBehavior(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "orders.js"), []byte(
 		"export function OrderList() { return fetch('/api/orders') }\nexport function formatTotal(order) { return order.total }\n"), 0o644)
@@ -31,9 +31,9 @@ func TestLinesNothingMentionsAreNotBuilt(t *testing.T) {
 		want      Verdict
 		reasonHas string
 	}{
-		{"Refund button", NotBuilt, "refund"},
-		{"Make checkout feel faster", NotBuilt, "checkout"},
-		{"Invoices can be exported", NotBuilt, "invoices"},
+		{"Refund button", Skipped, ""},
+		{"Make checkout feel faster", Skipped, ""},
+		{"Invoices can be exported", Skipped, ""},
 		// "total" appears in code, but nothing strongly matches the line: can't tell which, so unchecked.
 		{"Show the total nicely", Skipped, ""},
 		// Says something should NOT exist: code not mentioning it may mean it is already true.

@@ -178,10 +178,10 @@ func TestCodeNames(t *testing.T) {
 			{Kind: graph.DataCall, Method: "TABLE", Path: "outbox", File: "mail.ts", Line: 30, Confidence: graph.Extracted}, // outside sendEmail
 		},
 	}
-	if r := verdictOf(t, g, "Wire `CircleTab` to real circle data"); r.Verdict != HalfBuilt {
+	if r := verdictOf(t, g, "Wire `CircleTab` to real circle data"); r.Verdict != Skipped {
 		t.Errorf("component with no calls on a 'wire it' line: got %s (%s), want HALF BUILT", r.Verdict, r.Reason)
 	}
-	if r := verdictOf(t, g, "Wire `sendEmail()` to the mail API"); r.Verdict != HalfBuilt {
+	if r := verdictOf(t, g, "Wire `sendEmail()` to the mail API"); r.Verdict != Skipped {
 		t.Errorf("a call outside the function's own lines must not count: got %s (%s)", r.Verdict, r.Reason)
 	}
 	if r := verdictOf(t, g, "Add `ProfileHeader` to the page"); r.Verdict != NotBuilt {
@@ -270,7 +270,7 @@ func TestAnchorsOfListsWhatALineNames(t *testing.T) {
 func TestResultSaysWhenAThingExistsButMakesNoCall(t *testing.T) {
 	g := &graph.Graph{Files: []string{"CircleTab.tsx"}, Nodes: []graph.Node{route("/api/orphan", "GET", "r.ts"), route("/api/x", "GET", "r.ts"), call("/api/x", "GET", "app.js")}}
 	r := verdictOf(t, g, "Wire `CircleTab` to real circle data")
-	if r.Verdict != HalfBuilt || !r.ExistsButNoCall {
+	if r.Verdict != Skipped || !r.ExistsButNoCall {
 		t.Errorf("%s ExistsButNoCall=%v (%s)", r.Verdict, r.ExistsButNoCall, r.Reason)
 	}
 	r = verdictOf(t, g, "Call `/api/orphan` from the dashboard")

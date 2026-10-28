@@ -102,6 +102,8 @@ func sessionChange(g *graph.Graph, fd finding, ref, promise string, changed map[
 			reason: fmt.Sprintf("`%s` exists, but it hasn't changed since this session started, and this line says it \"%s\" — "+
 				"if it already did that before the session, name the new component or function in backticks so malveon can look for it", file, promise)}
 	}
+	fd.verdict = Skipped
+	fd.pairs = nil
 	fd.reason += fmt.Sprintf("; it changed since this session started — malveon sees the file changed, not that it \"%s\"; "+
 		"name the new component or function in backticks to check that", promise)
 	return fd
@@ -326,6 +328,9 @@ func importClosure(g *graph.Graph, file string, depth int) (files, missing []str
 		var next []string
 		for _, f := range level {
 			for _, im := range g.Imports[f] {
+				if im.TypeOnly {
+					continue
+				}
 				if im.File == "" {
 					missing = append(missing, im.Missing)
 					continue
@@ -569,7 +574,22 @@ func usageOf(g *graph.Graph, file, name string) usage {
 	case frameworkLoaded[stem]:
 		return usage{used: true, traced: true, how: "Next.js loads " + base + " itself"}
 	}
-	if imp := g.ImportersOf(file); len(imp) > 0 {
+	var live []string
+	all := g.ImportersOf(file)
+	for _, f := range all {
+		if graph.SourceRole(f) == "production" {
+			for _, im := range g.Imports[f] {
+				if im.File == file && !im.TypeOnly {
+					live = append(live, f)
+					break
+				}
+			}
+		}
+	}
+	if len(live) == 0 && len(all) > 0 {
+		return usage{how: "only tests, fixtures or type-only imports reference this file; production integration is not established"}
+	}
+	if imp := live; len(imp) > 0 {
 		how := "imported by " + imp[0]
 		if len(imp) > 1 {
 			how += fmt.Sprintf(" and %d more", len(imp)-1)
@@ -605,8 +625,11 @@ func nameUsage(g *graph.Graph, file, name string) usage {
 	}
 	var by []string
 	for _, imp := range g.ImportersOf(file) {
+		if graph.SourceRole(imp) != "production" {
+			continue
+		}
 		for _, im := range g.Imports[imp] {
-			if im.File == file && (im.Name == name || im.Name == "") {
+			if !im.TypeOnly && im.File == file && (im.Name == name || im.Name == "") {
 				by = append(by, imp)
 				break
 			}

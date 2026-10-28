@@ -21,7 +21,7 @@ var (
 	// export { a, b as c } [from 'm'] · export type { T } [from 'm']
 	exportListPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:type[ \t]+)?\{([^}]*)\}`)
 	// export * from 'm' (everything: unknowable) · export * as ns from 'm'
-	exportStarPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]*\*[ \t]*(?:as[ \t]+([A-Za-z_$][\w$]*)[ \t]*)?from`)
+	exportStarPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:type[ \t]+)?\*[ \t]*(?:as[ \t]+([A-Za-z_$][\w$]*)[ \t]*)?from`)
 	// export const { a } = x · export const [a] = x
 	exportDestructurePattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:const|let|var)[ \t]*[{\[]`)
 	// export const|let|var name ... (the rest of the line is read for more declarators)

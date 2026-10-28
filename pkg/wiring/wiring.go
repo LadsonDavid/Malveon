@@ -48,9 +48,11 @@ const (
 )
 
 type Result struct {
-	FeatureID   string
-	FeatureName string
-	Source      string // where the plan line came from ("docs/PLAN.md:12"), see features.Feature
+	Citations          []string `json:"citations,omitempty"`
+	CitationValidation string   `json:"citation_validation,omitempty"`
+	FeatureID          string
+	FeatureName        string
+	Source             string // where the plan line came from ("docs/PLAN.md:12"), see features.Feature
 	// Unticked: the plan line is a "- [ ]" box, work not claimed as done
 	// yet. The verdict is still the true one; only the gate treats it
 	// differently (blocks on BROKEN only). See features.Feature.Unticked.
@@ -77,7 +79,9 @@ type Result struct {
 	// Closest, for an Unchecked line only: the routes and pages in the code
 	// that share a word with the line, so the writer knows what to name
 	// (hints.go). Never changes the verdict.
-	Closest []string `json:",omitempty"`
+	Closest       []string `json:",omitempty"`
+	EvidenceKind  string   `json:"evidence_kind,omitempty"`
+	CoverageLimit string   `json:"coverage_limit,omitempty"`
 
 	// Pairs are the frontend-call -> server-route connections this line's
 	// verdict rests on — what the contract check compares method and
@@ -142,6 +146,10 @@ var removalPattern = regexp.MustCompile(`(?i)(?:^[^A-Za-z]*|[—–:]\s*)(?:remo
 
 func evaluate(g *graph.Graph, f features.Feature, changed map[string]bool) Result {
 	base := Result{FeatureID: f.ID, FeatureName: f.Name, Source: f.Source, Unticked: f.Unticked}
+	base.Citations = f.Citations
+	if len(f.Citations) > 0 {
+		base.CitationValidation = "declared Source-column context; external target and attached claim have not been verified"
+	}
 
 	if skip, why := features.Classify(f); skip {
 		base.Verdict, base.Reason = Skipped, why
@@ -157,7 +165,11 @@ func evaluate(g *graph.Graph, f features.Feature, changed map[string]bool) Resul
 			removal = false
 		}
 	}
-	anchors := anchorsIn(f.Name)
+	anchorText := f.Name
+	for _, citation := range f.Citations {
+		anchorText = strings.Replace(anchorText, citation, "", 1)
+	}
+	anchors := anchorsIn(anchorText)
 	// A line whose only anchors are files, saying one will gain something, is
 	// judged by whether the file changed this session. A URL or code name in
 	// the line decides it as always; so does a removal or a line that only
@@ -225,9 +237,13 @@ func evaluate(g *graph.Graph, f features.Feature, changed map[string]bool) Resul
 		// Nothing in the code mentions any of the line's meaningful words:
 		// that's a fact, NOT BUILT (founder's call, 2026-09-29; "Refund button"
 		// in a project with no refund code used to come back "rewrite this line").
-		if words := specificWords(g, f); len(words) > 0 && !anyMentioned(g, words) && !negativeLine(f) {
+
+		// Only explicit source anchors can establish a missing named artifact.
+		// The absence of ordinary prose keywords is not absence of behavior.
+		if words := specificWords(g, f); len(anchors) > 0 && len(words) > 0 && !anyMentioned(g, words) && !negativeLine(f) {
 			base.Verdict = NotBuilt
-			base.Reason = fmt.Sprintf("nothing in the code mentions %s — if it's built under another name, name the file or component in the line", orList(words))
+			base.EvidenceKind = "source_fact"
+			base.Reason = fmt.Sprintf("no extracted source matches the explicitly named artifact (%s); unsupported syntax is outside this lookup", orList(words))
 			return base
 		}
 		base.Verdict, base.Unchecked = Skipped, true
@@ -259,6 +275,23 @@ func onlyFiles(anchors []anchor) bool {
 	return len(anchors) > 0
 }
 
+var sourceFactWords = regexp.MustCompile(`(?i)^\s*(?:in\s+)?(?:exists(?:\s+and\s+is\s+imported)?|is\s+defined)\s*\.?\s*$`)
+
+func sourceFactOnly(text string, found []finding) bool {
+	rest := backtickPattern.ReplaceAllString(text, "")
+	if !sourceFactWords.MatchString(rest) {
+		return false
+	}
+	if strings.Contains(strings.ToLower(rest), "imported") {
+		for _, f := range found {
+			if !f.use.traced || !f.use.used {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // combine turns a line's findings into one verdict: a proven problem
 // wins over a missing piece, which wins over a half-built one; otherwise
 // the line is CONNECTED. When every finding is exists-only, the line is
@@ -278,7 +311,7 @@ func combine(base Result, found []finding, claimsConnection bool) Result {
 	allExistsOnly := best == ""
 	unused, useNote := "", ""
 	if allExistsOnly {
-		best = Working
+		best = Skipped // Existence/imports alone do not establish a promised behavior.
 		for _, fd := range found {
 			switch {
 			case fd.use.traced && !fd.use.used && unused == "":
@@ -287,9 +320,13 @@ func combine(base Result, found []finding, claimsConnection bool) Result {
 				useNote = fd.use.how
 			}
 		}
-		if claimsConnection || unused != "" {
-			best = HalfBuilt
+		if claimsConnection || unused != "" || strings.Contains(useNote, "only tests or fixtures") {
+			best = Skipped
 		}
+	}
+	// Exact structural claims can be supported without claiming behavior.
+	if allExistsOnly && sourceFactOnly(base.FeatureName, found) {
+		best = Working
 	}
 	// Problems first in the reason text, so the line reads as its verdict.
 	var reasons []string
@@ -301,18 +338,25 @@ func combine(base Result, found []finding, claimsConnection bool) Result {
 		}
 	}
 	base.Verdict = best
+	base.EvidenceKind = "source_fact"
 	base.Unchecked = best == Skipped // malveon couldn't tell: not a verdict about the code
 	base.Reason = strings.Join(reasons, "; ")
+	if allExistsOnly && best != Working {
+		base.Reason += "; only source existence/imports were checked; promised behavior remains unverified"
+	}
 	switch {
 	case allExistsOnly && claimsConnection:
 		base.ExistsButNoCall = true
-		base.Reason += " — but it makes no server or database call, and this line says it should"
+		base.Reason += " — source found, but the requested behavior is not established; direct HTTP/database calls are not required for delegated or local work"
 	case unused != "":
-		base.Reason += " — but nothing in the app uses it: " + unused
+		base.Reason += " — production integration is not established: " + unused
 	case allExistsOnly && useNote != "":
 		base.Reason += "; " + useNote
 	}
 	base.Evidence = dedupe(base.Evidence)
+	if base.Unchecked {
+		base.CoverageLimit = base.Reason
+	}
 	return base
 }
 
@@ -353,6 +397,7 @@ var (
 // and every code name in backticks. A UI breadcrumb in backticks
 // (`Settings > CircleTab`) names its last part.
 func anchorsIn(name string) []anchor {
+	name = citationParenthesis.ReplaceAllString(name, " ")
 	name = winPathPattern.ReplaceAllStringFunc(name, func(p string) string { return strings.ReplaceAll(p, "\\", "/") })
 	var out []anchor
 	seen := map[string]bool{}

@@ -193,6 +193,17 @@ func reachedFiles(g *graph.Graph, s span) (files []string, unsure bool) {
 			continue
 		}
 		fs, missing := importClosure(g, sp.file, 3)
+		// Effects follow runtime imports only. A type-only edge may still explain
+		// a port relationship, so its absence from that closure cannot prove the
+		// two named source artifacts are disconnected.
+		for _, file := range fs {
+			for _, im := range g.Imports[file] {
+				if im.TypeOnly {
+					unsure = true
+				}
+			}
+		}
+
 		files = append(files, fs...)
 		if len(missing) > 0 {
 			unsure = true
