@@ -1,12 +1,12 @@
 {
-    "version": "0.4.6",
+    "version": "0.4.7",
     "description": "Checks whether an AI coding agent's claimed-done work actually matches your plan, by reading the real code",
     "homepage": "https://github.com/LadsonDavid/Malveon",
     "license": { "identifier": "Proprietary", "url": "https://github.com/LadsonDavid/Malveon/blob/main/BETA-LICENSE.txt" },
     "architecture": {
         "64bit": {
-            "url": "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.6/malveon-windows-amd64.exe#/malveon.exe",
-            "hash": "4c8daa82d2e8f3521fcf24392ea8ec020c62da9e6802619a9388f578f1cd0310"
+            "url": "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.7/malveon-windows-amd64.exe#/malveon.exe",
+            "hash": "b1c54f513814208b541e39f36d034dc037e26dd02ce8e011a3856d0afcee62b1"
         }
     },
     "bin": "malveon.exe",
