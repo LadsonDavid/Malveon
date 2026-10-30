@@ -424,6 +424,19 @@ var aiToolDirs = map[string]bool{
 	".gemini": true, ".windsurf": true, ".aider": true, ".continue": true,
 }
 
+// notPlanDirs are folders whose files are never the project's plan: repo-host housekeeping and test
+// data. A feature_request.md issue template or a fixtures/plan.md is a candidate by name and by content
+// but nobody's plan (found 2026-10-30: `malveon check` stopped on 15 of 15 real projects asking which of
+// README.md, CHANGELOG.md, CODE_OF_CONDUCT.md, issue templates and fixtures was "the plan").
+var notPlanDirs = map[string]bool{
+	".github": true, ".gitlab": true, ".circleci": true, ".husky": true, ".vscode": true, ".idea": true,
+	"fixtures": true, "__fixtures__": true, "fixture": true, "testdata": true, "__tests__": true, "e2e": true,
+	"vendor": true, "third_party": true, "__snapshots__": true,
+}
+
+// notPlanFile: a project's housekeeping documents. Any extension; matched on the name's stem.
+var notPlanFile = regexp.MustCompile(`(?i)^(readme|changelog|changes|history|code[_-]of[_-]conduct|contributing|license|licence|security|support|governance|authors|notice|pull[_-]request[_-]template|issue[_-]template|agents|claude|gemini)(\.|$|[-_])`)
+
 var (
 	candidateNamePattern = regexp.MustCompile(`(?i)(plan|feature|checklist|todo)`)
 	candidateExts        = map[string]bool{".json": true, ".md": true, ".markdown": true, ".txt": true}
@@ -451,13 +464,13 @@ func Detect(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && (skipdirs.Names[d.Name()] || aiToolDirs[d.Name()]) {
+			if path != root && (skipdirs.Names[d.Name()] || aiToolDirs[d.Name()] || notPlanDirs[strings.ToLower(d.Name())]) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		name := d.Name()
-		if !candidateExts[strings.ToLower(filepath.Ext(name))] {
+		if !candidateExts[strings.ToLower(filepath.Ext(name))] || notPlanFile.MatchString(name) {
 			return nil
 		}
 		if candidateNamePattern.MatchString(name) {
@@ -498,14 +511,14 @@ func DetectByContent(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if path != root && (skipdirs.Names[d.Name()] || aiToolDirs[d.Name()]) {
+			if path != root && (skipdirs.Names[d.Name()] || aiToolDirs[d.Name()] || notPlanDirs[strings.ToLower(d.Name())]) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		name := d.Name()
 		ext := strings.ToLower(filepath.Ext(name))
-		if ext != ".json" && ext != ".md" && ext != ".markdown" {
+		if (ext != ".json" && ext != ".md" && ext != ".markdown") || notPlanFile.MatchString(name) {
 			return nil
 		}
 		raw, readErr := os.ReadFile(path)

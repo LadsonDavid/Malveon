@@ -159,6 +159,9 @@ func TestNextPagesRouterPaths(t *testing.T) {
 		{"pages/_app.tsx", "", false, false},
 		{"pages/api/items.test.ts", "", false, false},
 		{"src/app/pages/x.tsx", "", false, false},
+		{"apps/web/pages/api/integrations/[...args].ts", "/api/integrations/:...args", true, true},
+		{"apps/web/src/pages/shop/index.tsx", "/shop", false, true},
+		{"apps/web/lib/pages/x.tsx", "", false, false},
 	}
 	for _, c := range cases {
 		path, api, ok := nextPagesPath(c.file)

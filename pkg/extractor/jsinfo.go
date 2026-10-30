@@ -47,6 +47,7 @@ var (
 // collectJSInfo reads every JavaScript/TypeScript file under root once.
 func collectJSInfo(root string) *jsInfo {
 	info := &jsInfo{clients: map[string]bool{}, wrappers: map[string]wrapper{}, mentions: map[string]int{}, uses: map[string]int{}}
+	readFile := newReadAhead(root)
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -65,12 +66,12 @@ func collectJSInfo(root string) *jsInfo {
 		rel = filepath.ToSlash(rel)
 		switch {
 		case strings.EqualFold(filepath.Base(path), "package.json"):
-			if raw, err := os.ReadFile(path); err == nil {
+			if raw, err := readFile(path); err == nil {
 				info.addPackage(filepath.ToSlash(filepath.Dir(rel)), raw)
 			}
 			return nil
 		case ext == ".prisma":
-			if raw, err := os.ReadFile(path); err == nil {
+			if raw, err := readFile(path); err == nil {
 				info.addPrisma(string(raw))
 			}
 			return nil
@@ -78,7 +79,7 @@ func collectJSInfo(root string) *jsInfo {
 		if templateExts[ext] {
 			// Templates call functions too (onclick="save()", @click="save"):
 			// count what they mention, read nothing else from them.
-			if raw, err := os.ReadFile(path); err == nil {
+			if raw, err := readFile(path); err == nil {
 				countWords(string(raw), info.mentions)
 				countWords(string(raw), info.uses) // plain words, imports included: errs toward "used"
 			}
@@ -89,7 +90,7 @@ func collectJSInfo(root string) *jsInfo {
 		default:
 			return nil
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := readFile(path)
 		if err != nil {
 			return nil
 		}

@@ -231,7 +231,11 @@ func flatRoutePaths(rest []string) []string {
 	if strings.HasSuffix(stem, ".server") || strings.HasSuffix(stem, ".client") || strings.Contains(stem, ".test") || strings.Contains(stem, ".spec") {
 		return nil
 	}
-	dirs := rest[:len(rest)-1]
+	dirs := append([]string{}, rest[:len(rest)-1]...)
+	// remix-flat-routes: a folder named `api+` holds files of the flat route `api.<file>`.
+	for i, d := range dirs {
+		dirs[i] = strings.TrimSuffix(d, "+")
+	}
 	var name string
 	if stem == "route" && len(dirs) > 0 {
 		name = strings.Join(dirs, ".")

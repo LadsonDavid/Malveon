@@ -429,9 +429,22 @@ func anchorsIn(name string) []anchor {
 		}
 	}
 	for _, m := range slashFilePattern.FindAllStringSubmatch(name, -1) {
-		add(anchor{kind: fileAnchor, text: m[1]})
+		add(anchor{kind: fileAnchor, text: trimUnbalanced(m[1])})
 	}
 	return out
+}
+
+// trimUnbalanced drops a leading ( or [ that has no closer in the path, and the reverse: the
+// brackets people wrap a path in ("[src/add.js]") are not part of it, while Next.js route
+// segments like (app) and [id] are balanced and stay.
+func trimUnbalanced(p string) string {
+	for len(p) > 0 && (p[0] == '(' && !strings.Contains(p, ")") || p[0] == '[' && !strings.Contains(p, "]")) {
+		p = p[1:]
+	}
+	for len(p) > 0 && (p[len(p)-1] == ')' && !strings.Contains(p, "(") || p[len(p)-1] == ']' && !strings.Contains(p, "[")) {
+		p = p[:len(p)-1]
+	}
+	return p
 }
 
 // Anchored reports whether text names at least one thing this check

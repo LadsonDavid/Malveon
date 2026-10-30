@@ -153,11 +153,18 @@ var pagesExts = map[string]bool{".ts": true, ".tsx": true, ".js": true, ".jsx": 
 // index files stand for their folder. api says it is under pages/api.
 // ok is false for anything that isn't a routed file (outside pages/, _app,
 // _document, tests).
+// monorepoAppDirs are the folders whose subfolders are separate apps, each with its own pages/.
+var monorepoAppDirs = map[string]bool{"apps": true, "packages": true, "examples": true, "services": true, "projects": true}
+
 func nextPagesPath(relFile string) (path string, api, ok bool) {
 	parts := strings.Split(filepath.ToSlash(relFile), "/")
 	at := -1
-	for _, i := range []int{0, 1} {
-		if i < len(parts)-1 && parts[i] == "pages" && (i == 0 || parts[0] == "src") {
+	// pages/ or src/pages/, or one app down in a monorepo: apps/web/pages, apps/web/src/pages.
+	for _, i := range []int{0, 1, 2, 3} {
+		if i >= len(parts)-1 || parts[i] != "pages" {
+			continue
+		}
+		if i == 0 || i == 1 && parts[0] == "src" || monorepoAppDirs[parts[0]] && (i == 2 || i == 3 && parts[2] == "src") {
 			at = i
 			break
 		}

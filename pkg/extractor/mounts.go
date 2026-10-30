@@ -21,7 +21,7 @@ type jsMount struct {
 }
 
 var (
-	jsUseCall      = regexp.MustCompile(`\b\w+\.use\s*\(`)
+	jsUseCall      = regexp.MustCompile(`\b\w+\.(?:use|route)\s*\(`) // Express app.use(prefix, router), Hono app.route(prefix, app)
 	requireSpec    = regexp.MustCompile(`^require\s*\(\s*['"]([^'"]+)['"]\s*\)(?:\.\w+)?$`)
 	plainIdent     = regexp.MustCompile(`^[A-Za-z_$][\w$]*$`)
 	routerDeclCall = regexp.MustCompile(`\bRouter\s*\(`)
@@ -67,15 +67,18 @@ func scanJSMounts(src string) []jsMount {
 	return out
 }
 
-// jsDeclaresRouter: the file creates an Express-style Router.
-func jsDeclaresRouter(src string) bool {
+// jsRouterCount: how many Express-style Routers the file creates. One means the file's mount is
+// the router's mount; two or more means each router is mounted somewhere else (ForgeGrowth's
+// mcp.js: adminRouter at /api, apiRouter at /api/mcp/v1), so the file's real URLs are unknown.
+func jsRouterCount(src string) int {
 	cm := newCodeMap(src, jsSyntax)
+	n := 0
 	for _, m := range routerDeclCall.FindAllStringIndex(src, -1) {
 		if cm.codeAt(src, m[0]) {
-			return true
+			n++
 		}
 	}
-	return false
+	return n
 }
 
 type mountEdge struct {
@@ -85,7 +88,7 @@ type mountEdge struct {
 // applyMounts gives every route in a mounted file its mount prefix(es), and
 // marks routes of a router file that nothing mounts as Unmounted: their real
 // URL is unknown, so they can't be compared with other files' routes.
-func applyMounts(g *graph.Graph, mounts map[string][]jsMount, routerFiles map[string]bool) {
+func applyMounts(g *graph.Graph, mounts map[string][]jsMount, routerFiles map[string]int) {
 	bySlash := map[string]string{}
 	for _, f := range g.Files {
 		bySlash[filepath.ToSlash(f)] = f
@@ -134,11 +137,12 @@ func applyMounts(g *graph.Graph, mounts map[string][]jsMount, routerFiles map[st
 				c := n
 				c.Path = joinURL(p, n.Path)
 				c.Words = wordsFor(n.File, c.Path)
+				c.Unmounted = c.Unmounted || routerFiles[n.File] >= 2
 				nodes = append(nodes, c)
 			}
 			continue
 		}
-		if routerFiles[n.File] {
+		if routerFiles[n.File] > 0 {
 			n.Unmounted = true
 		}
 		nodes = append(nodes, n)

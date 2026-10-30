@@ -24,7 +24,7 @@ func Extract(root string) (*graph.Graph, error) {
 	exports := map[string]graph.ExportSet{}
 	info := collectJSInfo(root)
 	mounts := map[string][]jsMount{}
-	routerFiles := map[string]bool{}
+	routerFiles := map[string]int{}
 	pyMounts := map[string][]pyMountRef{}
 	dj := newDjangoProject()
 	tp := newTRPCProject()
@@ -99,7 +99,7 @@ func Extract(root string) (*graph.Graph, error) {
 			imports[rel] = scanJSImports(src)
 			exports[rel] = scanJSExports(src)
 			mounts[rel] = scanJSMounts(src)
-			routerFiles[rel] = jsDeclaresRouter(src)
+			routerFiles[rel] = jsRouterCount(src)
 			if IsNextRouteFile(rel) {
 				sites = append(sites, scanNextRouteHandlers(rel, src)...)
 			}
@@ -203,11 +203,21 @@ func IsTestFile(rel string) bool {
 	base := parts[len(parts)-1]
 	switch {
 	case strings.HasSuffix(base, "_test.go"), strings.HasSuffix(base, "_test.py"),
-		strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py"), base == "conftest.py":
+		strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py"), base == "conftest.py", base == "tests.rs", strings.HasSuffix(base, ".rs") && inDir(parts, "tests"):
 		return true
 	}
 	for _, mark := range []string{".test.", ".spec.", ".cy."} {
 		if strings.Contains(base, mark) {
+			return true
+		}
+	}
+	return false
+}
+
+// inDir: one of the folders above the file is named dir (Rust integration tests live in tests/).
+func inDir(parts []string, dir string) bool {
+	for _, p := range parts[:len(parts)-1] {
+		if p == dir {
 			return true
 		}
 	}

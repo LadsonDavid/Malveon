@@ -32,6 +32,9 @@ var (
 	commonJSExportPattern = regexp.MustCompile(`\bmodule\.exports\b|(?:^|[^.\w$])exports\.|(?:^|[^.\w$])exports\[|\bObject\.defineProperty\(\s*exports\b`)
 )
 
+// listComments are the // and /* */ comments people put between the names of an export list.
+var listComments = regexp.MustCompile(`//[^\n]*|/\*(?s:.*?)\*/`)
+
 // scanJSExports lists the names src exports. It reads the text, not the code map: the
 // code map is not a parser, and a regex literal holding a quote (`/"/g`) makes it take
 // every later line for a string. Missing an export invents a broken import; counting an
@@ -50,7 +53,7 @@ func scanJSExports(src string) graph.ExportSet {
 		set.Names["default"] = true
 	}
 	for _, m := range exportListPattern.FindAllStringSubmatchIndex(src, -1) {
-		for _, part := range strings.Split(src[m[2]:m[3]], ",") {
+		for _, part := range strings.Split(listComments.ReplaceAllString(src[m[2]:m[3]], " "), ",") {
 			fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(part), "type "))
 			switch {
 			case len(fields) == 1:
