@@ -378,6 +378,8 @@ type anchor struct {
 	method string // HTTP method written right before a URL ("POST /api/jobs"), else ""
 }
 
+var folderWords = regexp.MustCompile(`(?i)\b(folders?|directory|directories|dirs?|structure|layout)\b`)
+
 var (
 	backtickPattern  = regexp.MustCompile("`([^`]+)`")
 	fileRefPattern   = regexp.MustCompile(`^[\w\-./\[\]()@]*[\w-]\.(?:tsx|ts|jsx|js|mjs|cjs|py|go|rs|java|rb|php|cs|css|scss|less|sql|md|json|html|vue|svelte|prisma|yml|yaml)$`)
@@ -409,7 +411,11 @@ func anchorsIn(name string) []anchor {
 		}
 	}
 
+	folderLine := folderWords.MatchString(name)
 	for _, u := range features.PlanURLs(name) {
+		if folderLine && !strings.Contains(strings.Trim(u.Path, "/"), "/") && u.Method == "" {
+			continue // "folder structure: `/app`, `/lib`": directories, not server addresses
+		}
 		add(anchor{kind: pathAnchor, text: u.Path, method: u.Method})
 	}
 	scan := name
@@ -716,6 +722,12 @@ func checkName(g *graph.Graph, name string) (finding, bool) {
 	if g.NameAnywhere(last) {
 		return finding{}, false
 	}
+	// A table or model the project declares in its own schema or migrations exists, even if no
+	// code reads it yet. (Only for a line that is about the name alone; whether a route reaches the
+	// table is judged elsewhere.)
+	if file, ok := g.Tables[strings.ToLower(last)]; ok {
+		return checkSpan(g, span{file: file, label: label}, fmt.Sprintf("table %s is declared in %s", label, file)), true
+	}
 	// A plain lowercase word (`profiles`) could be a column or a CSS value
 	// malveon doesn't read — too loose to call missing. A code-shaped name
 	// (camelCase, PascalCase, snake_case) that's nowhere in the code is.
@@ -825,7 +837,7 @@ func withCalledRoutes(g *graph.Graph, spans []span) []span {
 	for _, s := range spans {
 		for _, n := range g.NodesInFile(s.file) {
 			if n.Kind == graph.NetworkCall && n.Confidence == graph.Extracted && s.contains(n) {
-				for _, r := range g.RoutesServing(n.Path) {
+				for _, r := range g.RoutesServingCall(n) {
 					out = append(out, span{file: r.File})
 				}
 			}
@@ -860,7 +872,7 @@ func checkSpan(g *graph.Graph, s span, existsReason string) finding {
 		}
 		switch n.Kind {
 		case graph.NetworkCall:
-			routes := g.RoutesServing(n.Path)
+			routes := g.RoutesServingCall(n)
 			if len(routes) == 0 {
 				return finding{verdict: Broken, evidence: []string{loc(n)}, spans: []span{s},
 					reason: fmt.Sprintf("%s — but it calls %s %s (%s), and no server route handles that", existsReason, methodLabel(n), n.Path, loc(n))}
@@ -1105,7 +1117,7 @@ func pathWordsOf(path string) []string {
 
 // checkCall answers "does this frontend call reach a real route".
 func checkCall(g *graph.Graph, c graph.Node) finding {
-	routes := g.RoutesServing(c.Path)
+	routes := g.RoutesServingCall(c)
 	if len(routes) == 0 {
 		return finding{verdict: Broken, evidence: []string{loc(c)},
 			reason: fmt.Sprintf("the frontend calls %s %s (%s), but no server route handles it", methodLabel(c), c.Path, loc(c))}

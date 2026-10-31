@@ -106,7 +106,7 @@ func Extract(root string) (*graph.Graph, error) {
 			if site, ok := nextPageSite(rel); ok {
 				sites = append(sites, site)
 			}
-			sites = append(sites, scanNextPagesRouter(rel, src)...)
+			sites = append(sites, scanNextPagesRouter(rel, src, info)...)
 			sites = append(sites, scanNuxtServerRoute(rel, src, info)...)
 			sites = append(sites, scanNest(rel, src, info)...)
 			sites = append(sites, scanSvelteKitServer(rel, src, info)...)
@@ -287,19 +287,21 @@ func recordDefs(g *graph.Graph, rel, ext, src string) {
 
 func toNode(file string, s callSite) graph.Node {
 	n := graph.Node{
-		Kind:          s.kind,
-		File:          file,
-		Line:          s.line,
-		Method:        s.method,
-		EnclosingFunc: s.enclosingFunc,
-		BodyFields:    s.bodyFields,
-		Op:            s.op,
-		Unreferenced:  s.unreferenced,
-		Stub:          s.stub,
-		Receiver:      s.receiver,
-		Unmounted:     s.unmounted,
-		FileRouted:    s.fileRouted,
-		RPC:           s.rpc,
+		Kind:           s.kind,
+		File:           file,
+		Line:           s.line,
+		Method:         s.method,
+		EnclosingFunc:  s.enclosingFunc,
+		BodyFields:     s.bodyFields,
+		RequiredFields: s.requiredFields,
+		Tail:           s.tail,
+		Op:             s.op,
+		Unreferenced:   s.unreferenced,
+		Stub:           s.stub,
+		Receiver:       s.receiver,
+		Unmounted:      s.unmounted,
+		FileRouted:     s.fileRouted,
+		RPC:            s.rpc,
 	}
 	if s.kind == graph.DataCall {
 		n.Path = s.argRaw // a table/function name, read straight from a string literal
@@ -309,6 +311,7 @@ func toNode(file string, s callSite) graph.Node {
 		n.Confidence = graph.Extracted
 	} else {
 		n.Confidence = graph.Inferred
+		n.External = s.kind == graph.NetworkCall && isAbsoluteURLArg(s.argRaw)
 	}
 	n.Words = wordsFor(file, n.Path)
 	return n

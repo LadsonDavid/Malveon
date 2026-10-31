@@ -39,8 +39,8 @@ type wrapper struct {
 var (
 	clientDecl = regexp.MustCompile(`(?:const|let|var)\s+(\w+)\s*=\s*(?:await\s+)?(?:axios|ky|got)\.(?:create|extend)\s*\(`)
 	// function name(a, b) {   async function name(a) {   const name = (a, b) => {   const name = a => {
-	fnWithParams = regexp.MustCompile(`(?:^|\W)(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|` +
-		`\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|\(([^)]*)\)\s*(?::\s*[^=;{]+)?=>\s*\{?|([\w$]+)\s*=>\s*\{?)`)
+	fnWithParams = regexp.MustCompile(`(?:^|\W)(?:async\s+)?function\s+(\w+)\s*(?:<[^()]*>)?\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|` +
+		`\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|(?:<[^()]*>\s*)?\(([^)]*)\)\s*(?::\s*[^=;{]+)?=>\s*\{?|([\w$]+)\s*=>\s*\{?)`)
 	wordPattern = regexp.MustCompile(`[A-Za-z_$][\w$]*`)
 )
 

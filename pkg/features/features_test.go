@@ -412,9 +412,9 @@ func TestExpectsOutsideCaller(t *testing.T) {
 	}
 }
 
-// A "- [ ]" line is future work the plan hasn't claimed yet; "- [x]" and a
-// plain bullet are due now (found 2026-09-29: with a pre-commit hook, every
-// unticked to-do blocked every commit until the whole plan was built).
+// A "- [ ]" line is future work the plan hasn't claimed yet; so is a plain bullet or a numbered
+// line (2026-10-30: a roadmap plan of 70 not-yet-built lines read FAILED and overwhelmed the people
+// who tried it). Only "- [x]" (or a done marker) claims the work exists.
 func TestLoadRecordsUnticked(t *testing.T) {
 	dir := t.TempDir()
 	md := filepath.Join(dir, "PLAN.md")
@@ -423,7 +423,7 @@ func TestLoadRecordsUnticked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{"Export CSV": true, "Refund button": false, "Cancel order": false, "Plain bullet": false, "Numbered": false, "Star unticked": true}
+	want := map[string]bool{"Export CSV": true, "Refund button": false, "Cancel order": false, "Plain bullet": true, "Numbered": true, "Star unticked": true}
 	if len(fs) != len(want) {
 		t.Fatalf("got %d lines, want %d: %+v", len(fs), len(want), fs)
 	}

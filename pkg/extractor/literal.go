@@ -10,19 +10,21 @@ import (
 // callSite is a raw hit before we've decided whether its argument is a
 // resolvable literal.
 type callSite struct {
-	kind          graph.Kind
-	method        string // "" if not applicable
-	line          int
-	argRaw        string   // raw text of the first argument, unparsed
-	enclosingFunc string   // name of the innermost named function containing this call, "" if top-level/unknown
-	bodyFields    []string // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved
-	receiver      string   // Python route: the router variable it hangs on
-	unmounted     bool     // a route of a router its own file never mounts
-	stub          bool     // RouteHandler whose handler only answers with an error
-	unreferenced  bool     // NetworkCall inside a function nothing in the project calls
-	op            string   // DataCall only: the method chained right after .from(...), or the auth method
-	fileRouted    bool     // the URL was derived from where the file sits (see graph.Node.FileRouted)
-	rpc           bool     // a tRPC procedure or a call to one (see graph.Node.RPC)
+	kind           graph.Kind
+	method         string // "" if not applicable
+	line           int
+	argRaw         string   // raw text of the first argument, unparsed
+	enclosingFunc  string   // name of the innermost named function containing this call, "" if top-level/unknown
+	bodyFields     []string // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved
+	tail           bool     // argRaw is only the end of the address (see graph.Node.Tail)
+	requiredFields []string // RouteHandler: see graph.Node.RequiredFields
+	receiver       string   // Python route: the router variable it hangs on
+	unmounted      bool     // a route of a router its own file never mounts
+	stub           bool     // RouteHandler whose handler only answers with an error
+	unreferenced   bool     // NetworkCall inside a function nothing in the project calls
+	op             string   // DataCall only: the method chained right after .from(...), or the auth method
+	fileRouted     bool     // the URL was derived from where the file sits (see graph.Node.FileRouted)
+	rpc            bool     // a tRPC procedure or a call to one (see graph.Node.RPC)
 }
 
 // funcRange is one named function's line span, used to work out which
@@ -69,6 +71,8 @@ func enclosingFuncFor(ranges []funcRange, line int) string {
 
 var (
 	// backend route registrations: app.get("/x", ...), router.post('/x', ...)
+	jsRouteChain   = regexp.MustCompile(`\b\w+\s*\.route\s*\(`)
+	jsChainedVerb  = regexp.MustCompile(`\)\s*\.\s*(get|post|put|delete|patch)\s*\(`)
 	jsRoutePattern = regexp.MustCompile(`(?i)\b(\w+)\.(get|post|put|delete|patch)\s*\(`)
 
 	// frontend network calls
@@ -115,6 +119,9 @@ func scanJSLike(src string) []callSite { return scanJSLikeWith(src, nil) }
 func scanJSLikeWith(src string, info *jsInfo) []callSite {
 	cm := newCodeMap(src, jsSyntax)
 	consts := stringConsts(src, cm)
+	alts := stringAlts(src, cm)
+	// `import axios from "../api/axios"`: an instance with its own baseURL, not the library
+	axiosIsLocal := strings.Contains(src, "axios") && strings.HasPrefix(importTable(src)["axios"], ".")
 	var sites []callSite
 
 	for _, m := range jsRoutePattern.FindAllStringSubmatchIndex(src, -1) {
@@ -130,13 +137,41 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		handlerArgs := splitTopLevelArgs(readArgsList(src, openParen))
 		stub := len(handlerArgs) > 1 && isStubHandler(handlerArgs[len(handlerArgs)-1])
 		sites = append(sites, callSite{
-			stub:       stub,
-			kind:       graph.RouteHandler,
-			method:     strings.ToUpper(src[m[4]:m[5]]),
-			line:       lineOf(src, m[0]),
-			argRaw:     arg,
-			bodyFields: readFields,
+			stub:           stub,
+			requiredFields: requiredFieldsIn(lastArg(handlerArgs), readFields),
+			kind:           graph.RouteHandler,
+			method:         strings.ToUpper(src[m[4]:m[5]]),
+			line:           lineOf(src, m[0]),
+			argRaw:         arg,
+			bodyFields:     readFields,
 		})
+	}
+	// router.route('/p').get(h).post(h): the chained form of the same registration.
+	chains := jsRouteChain.FindAllStringIndex(src, -1)
+	for ci, m := range chains {
+		if !cm.codeAt(src, m[0]) {
+			continue
+		}
+		open := m[1] - 1
+		arg := readFirstArg(src, open)
+		end := min(len(src), m[1]+4000)
+		if ci+1 < len(chains) && chains[ci+1][0] < end {
+			end = chains[ci+1][0] // the next route() starts a new chain
+		}
+		if i := strings.IndexByte(src[m[1]:end], ';'); i >= 0 {
+			end = m[1] + i
+		}
+		for _, c := range jsChainedVerb.FindAllStringSubmatchIndex(src[m[1]:end], -1) {
+			if !cm.codeAt(src, m[1]+c[0]) {
+				continue
+			}
+			sites = append(sites, callSite{
+				kind:   graph.RouteHandler,
+				method: strings.ToUpper(src[m[1]+c[2] : m[1]+c[3]]),
+				line:   lineOf(src, m[1]+c[0]),
+				argRaw: arg,
+			})
+		}
 	}
 	for _, m := range jsFetchPattern.FindAllStringIndex(src, -1) {
 		if !cm.codeAt(src, m[0]) {
@@ -146,13 +181,16 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		arg := withConsts(readFirstArg(src, openParen), consts)
 		argsList := readArgsList(src, openParen)
 		sentFields, _ := jsSentFieldsFromCallArgs(argsList, false)
-		sites = append(sites, callSite{
-			kind:       graph.NetworkCall,
-			method:     fetchMethod(argsList),
-			line:       lineOf(src, m[0]),
-			argRaw:     arg,
-			bodyFields: sentFields,
-		})
+		for _, a := range urlAlternatives(arg, alts) {
+			sites = append(sites, callSite{
+				kind:       graph.NetworkCall,
+				method:     fetchMethod(argsList),
+				line:       lineOf(src, m[0]),
+				argRaw:     tailArg(a),
+				tail:       isTail(a),
+				bodyFields: sentFields,
+			})
+		}
 	}
 	for _, m := range jsAxiosPattern.FindAllStringSubmatchIndex(src, -1) {
 		if !cm.codeAt(src, m[0]) {
@@ -161,13 +199,16 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		openParen := m[1] - 1
 		arg := withConsts(readFirstArg(src, openParen), consts)
 		sentFields, _ := jsSentFieldsFromCallArgs(readArgsList(src, openParen), true)
-		sites = append(sites, callSite{
-			kind:       graph.NetworkCall,
-			method:     strings.ToUpper(src[m[2]:m[3]]),
-			line:       lineOf(src, m[0]),
-			argRaw:     arg,
-			bodyFields: sentFields,
-		})
+		for _, a := range urlAlternatives(arg, alts) {
+			sites = append(sites, callSite{
+				kind:       graph.NetworkCall,
+				method:     strings.ToUpper(src[m[2]:m[3]]),
+				line:       lineOf(src, m[0]),
+				argRaw:     tailArg(a),
+				tail:       isTail(a) || axiosIsLocal,
+				bodyFields: sentFields,
+			})
+		}
 	}
 
 	for _, m := range supabaseFromPattern.FindAllStringSubmatchIndex(src, -1) {
@@ -574,7 +615,7 @@ func literalPath(raw string) (string, bool) {
 	if fstring && strings.Contains(inner, "{") {
 		return "", false
 	}
-	if i := strings.IndexAny(inner, "?#"); i >= 0 && !optionalCatchAllEnd(inner, i) {
+	if i := queryStart(inner); i >= 0 && !optionalCatchAllEnd(inner, i) {
 		inner = inner[:i] // the query string / fragment isn't part of the route
 	}
 	if inner == "" || inner[0] != '/' {
@@ -616,4 +657,22 @@ func templatePath(inner string) (string, bool) {
 		return "", false
 	}
 	return strings.Join(segs, "/"), true
+}
+
+// queryStart is the index of the "?" or "#" that begins a query string or fragment, ignoring one
+// inside a ${...} placeholder (`${team?.slug}` is optional chaining, not a query). -1 if none.
+func queryStart(s string) int {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '$' && i+1 < len(s) && s[i+1] == '{':
+			depth++
+			i++
+		case s[i] == '}' && depth > 0:
+			depth--
+		case depth == 0 && (s[i] == '?' || s[i] == '#'):
+			return i
+		}
+	}
+	return -1
 }

@@ -23,6 +23,11 @@ var (
 	clientCall = regexp.MustCompile(`(?i)\b(\w+)\.(get|post|put|delete|patch)\s*\(`)
 )
 
+var bodyKey = regexp.MustCompile(`\bbody\s*[:,}]`)
+
+// httpClientModule: a relative import whose file name says it is the project's HTTP client.
+var httpClientModule = regexp.MustCompile(`^\.{1,2}/(?:[\w.-]+/)*(?:axios|api|client|http|request|fetcher|apiClient|axiosInstance|axiosClient)(?:\.[jt]sx?)?$`)
+
 func (in *jsInfo) isClient(name string) bool { return in != nil && in.clients[name] }
 
 func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo) []callSite {
@@ -63,16 +68,29 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 	}
 
 	// api.get('/x') where api = axios.create(...).
-	if info != nil && len(info.clients) > 0 {
+	if info != nil {
+		var imports map[string]string
 		for _, m := range clientCall.FindAllStringSubmatchIndex(src, -1) {
-			if !cm.codeAt(src, m[0]) || !info.isClient(src[m[2]:m[3]]) {
+			if !cm.codeAt(src, m[0]) {
 				continue
+			}
+			recv := src[m[2]:m[3]]
+			if !info.isClient(recv) {
+				// `import api from '../api/axios'`: a default export that is an axios.create() instance
+				// has no name of its own, so recognise it by where it is imported from.
+				if imports == nil {
+					imports = importTable(src)
+				}
+				if !httpClientModule.MatchString(imports[recv]) {
+					continue
+				}
 			}
 			open := m[1] - 1
 			sent, _ := jsSentFieldsFromCallArgs(readArgsList(src, open), true)
 			sites = append(sites, callSite{
 				kind: graph.NetworkCall, method: strings.ToUpper(src[m[4]:m[5]]), line: lineOf(src, m[0]),
 				argRaw: withConsts(readFirstArg(src, open), consts), bodyFields: sent,
+				tail: true, // the instance has a baseURL (often /api) written where it was created
 			})
 		}
 	}
@@ -83,7 +101,7 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 		for n := range info.wrappers {
 			names = append(names, regexp.QuoteMeta(n))
 		}
-		call := regexp.MustCompile(`\b(` + strings.Join(names, "|") + `)\s*\(`)
+		call := regexp.MustCompile(`\b(` + strings.Join(names, "|") + `)\s*(?:<[^()]*>)?\s*\(`)
 		for _, m := range call.FindAllStringSubmatchIndex(src, -1) {
 			if !cm.codeAt(src, m[0]) || declaredHere(src, m[0]) {
 				continue
@@ -101,6 +119,10 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 			method := w.method
 			if mm := fetchMethodFieldPattern.FindStringSubmatch(argsList); mm != nil {
 				method = strings.ToUpper(mm[1])
+			} else if v := verbArg(args[:w.param]); v != "" {
+				method = v // sendJSON("DELETE", url): the method is an argument before the address
+			} else if bodyKey.MatchString(argsList) {
+				method = "" // a helper that is given a body and no method usually sends POST: do not call it a GET
 			}
 			sites = append(sites, callSite{kind: graph.NetworkCall, method: method, line: lineOf(src, m[0]), argRaw: arg})
 		}

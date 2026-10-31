@@ -77,6 +77,7 @@ func scanNextRouteHandlers(relFile, src string) []callSite {
 			if paren >= 0 {
 				if fields, ok := nextReadFields(src, paren); ok {
 					site.bodyFields = fields
+					site.requiredFields = requiredFieldsIn(handlerBodyAt(src, paren), fields)
 				}
 				site.stub = isStubHandler(handlerBodyAt(src, paren))
 			}
@@ -247,8 +248,14 @@ func pagesHandlerMethods(src string, cm codeMap) []string {
 // scanNextPagesRouter: a file under pages/api with a default export is a
 // route handler (it branches on req.method itself, so the method is unknown);
 // any other routed file under pages/ with one is a page.
-func scanNextPagesRouter(relFile, src string) []callSite {
+func scanNextPagesRouter(relFile, src string, info *jsInfo) []callSite {
 	path, api, ok := nextPagesPath(relFile)
+	if !ok {
+		// pages/ at any depth: the folder of the nearest package.json that depends on next is the app
+		if root, found := info.depDir(relFile, "next"); found && root != "." {
+			path, api, ok = nextPagesPath(strings.TrimPrefix(filepath.ToSlash(relFile), root+"/"))
+		}
+	}
 	if !ok {
 		return nil
 	}

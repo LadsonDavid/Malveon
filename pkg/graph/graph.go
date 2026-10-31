@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -49,23 +50,26 @@ type Loc struct {
 
 // Node is one extracted call or route registration.
 type Node struct {
-	Kind          Kind
-	File          string
-	Line          int
-	Method        string     // HTTP verb if known, "" if not applicable/unknown
-	Path          string     // the literal path string, "" if not resolvable statically
-	Confidence    Confidence // Extracted only when Path is a real literal
-	Words         []string   // tokens used for loose feature-name matching
-	EnclosingFunc string     // name of the innermost named function this node's line falls inside; "" if top-level or unknown
-	BodyFields    []string   // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved, non-nil (possibly empty) if resolved
-	Receiver      string     // Python route: the router variable it hangs on (bp, router), for following where that router is mounted
-	Stub          bool       // RouteHandler whose handler is short and only answers with an error (500/501, "not implemented")
-	Unreferenced  bool       // NetworkCall inside a function nothing in the project calls: not a call anyone makes
-	InTest        bool       // Node in a test or fixture file (foo.test.ts, __tests__/, *_test.go, test_*.py, cypress/, e2e/): the tests call it, the app doesn't
-	Unmounted     bool       // RouteHandler in a router file nothing was seen mounting: its real URL is unknown, so it isn't compared with other files' routes
-	Op            string     // DataCall only: the method chained right after .from(...) ("select", "insert", "upload"), or the auth method; "" if not chained directly
-	FileRouted    bool       // the URL comes from where the file sits (Next.js, Nuxt, SvelteKit, Remix, Astro), and the framework picks a static segment over a dynamic one whatever the order
-	RPC           bool       // a tRPC procedure or a call to one: Path is the wire path (/api/trpc/post.create), not a URL anyone wrote
+	Kind           Kind
+	File           string
+	Line           int
+	Method         string     // HTTP verb if known, "" if not applicable/unknown
+	Path           string     // the literal path string, "" if not resolvable statically
+	Confidence     Confidence // Extracted only when Path is a real literal
+	Words          []string   // tokens used for loose feature-name matching
+	EnclosingFunc  string     // name of the innermost named function this node's line falls inside; "" if top-level or unknown
+	BodyFields     []string   // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved, non-nil (possibly empty) if resolved
+	RequiredFields []string   // RouteHandler: the read fields the handler turns a request away for when missing; nil when no such guard was found
+	Tail           bool       // NetworkCall whose Path is only the end of the address (URL + "/signup"): the base was written in a variable, so it matches a route that ends with Path and is never judged on its own
+	External       bool       // NetworkCall to an absolute URL on another host (https://api.example.com/...): not a call to this project's server
+	Receiver       string     // Python route: the router variable it hangs on (bp, router), for following where that router is mounted
+	Stub           bool       // RouteHandler whose handler is short and only answers with an error (500/501, "not implemented")
+	Unreferenced   bool       // NetworkCall inside a function nothing in the project calls: not a call anyone makes
+	InTest         bool       // Node in a test or fixture file (foo.test.ts, __tests__/, *_test.go, test_*.py, cypress/, e2e/): the tests call it, the app doesn't
+	Unmounted      bool       // RouteHandler in a router file nothing was seen mounting: its real URL is unknown, so it isn't compared with other files' routes
+	Op             string     // DataCall only: the method chained right after .from(...) ("select", "insert", "upload"), or the auth method; "" if not chained directly
+	FileRouted     bool       // the URL comes from where the file sits (Next.js, Nuxt, SvelteKit, Remix, Astro), and the framework picks a static segment over a dynamic one whatever the order
+	RPC            bool       // a tRPC procedure or a call to one: Path is the wire path (/api/trpc/post.create), not a URL anyone wrote
 }
 
 // Import is one thing a file imports from another file in the project
@@ -391,6 +395,25 @@ type Pair struct {
 	Route Node
 }
 
+// RoutesServingCall is RoutesServing for a call node: a call that only knows the end of its address
+// (Node.Tail) is also served by a route whose path ends with it.
+func (g *Graph) RoutesServingCall(c Node) []Node {
+	routes := g.RoutesServing(c.Path)
+	if !c.Tail {
+		return routes
+	}
+	have := map[string]bool{}
+	for _, r := range routes {
+		have[r.File+"|"+r.Method+"|"+r.Path+"|"+strconv.Itoa(r.Line)] = true
+	}
+	for _, r := range g.literalNodes(RouteHandler, func(n Node) bool { return endsWith(n.Path, c.Path) }) {
+		if !have[r.File+"|"+r.Method+"|"+r.Path+"|"+strconv.Itoa(r.Line)] {
+			routes = append(routes, r)
+		}
+	}
+	return routes
+}
+
 // RoutesServing returns every literal route whose path serves path.
 func (g *Graph) RoutesServing(path string) []Node {
 	routes := g.literalNodes(RouteHandler, func(n Node) bool {
@@ -428,7 +451,7 @@ func wildcardCount(path string) int {
 // with its path: /items is probably /api/items under a prefix malveon didn't see.
 func (g *Graph) CallsToRoute(r Node) []Node {
 	return g.literalNodes(NetworkCall, func(n Node) bool {
-		return PathsMatch(n.Path, r.Path) || (r.Unmounted && endsWith(n.Path, r.Path))
+		return PathsMatch(n.Path, r.Path) || (r.Unmounted && endsWith(n.Path, r.Path)) || (n.Tail && endsWith(r.Path, n.Path))
 	})
 }
 
@@ -443,7 +466,7 @@ func endsWith(path, suffix string) bool {
 
 // CallsTo returns every literal network call whose path is path.
 func (g *Graph) CallsTo(path string) []Node {
-	return g.literalNodes(NetworkCall, func(n Node) bool { return PathsMatch(n.Path, path) })
+	return g.literalNodes(NetworkCall, func(n Node) bool { return PathsMatch(n.Path, path) || (n.Tail && endsWith(path, n.Path)) })
 }
 
 // RoutesUnder returns every literal route nested below prefix — a plan
@@ -572,7 +595,7 @@ func (g *Graph) FindFiles(ref string) []string {
 func (g *Graph) UnreadableCalls() []Node {
 	var out []Node
 	for _, n := range g.Nodes {
-		if n.Kind == NetworkCall && n.Confidence == Inferred && !n.Unreferenced && !n.InTest {
+		if n.Kind == NetworkCall && n.Confidence == Inferred && !n.External && !n.Unreferenced && !n.InTest {
 			out = append(out, n)
 		}
 	}

@@ -114,9 +114,10 @@ var (
 	// (FastAPI, Spring, .NET, Laravel, OpenAPI). Stopping at < or { cut
 	// `/api/users/<id>` to /api/users, which then matched the unrelated
 	// list route (found 2026-09-29).
-	planURLPattern   = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./)\]\\])(/[A-Za-z][\w-]*(?:/[\w\[\].:<>{}-]+)*)`)
+	planURLPattern   = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./)\]\\])(/(?:\.well-known|[A-Za-z][\w-]*)(?:/[\w\[\].:<>{}-]+)*)`)
 	methodBefore     = regexp.MustCompile(`(?i)\b(GET|POST|PUT|PATCH|DELETE)\s*$`)
 	fileExtAfterPath = regexp.MustCompile(`^\.[A-Za-z]`)
+	fileExtSuffix    = regexp.MustCompile(`^\.[A-Za-z0-9]{1,5}`)
 )
 
 // PlanURLs returns every URL a plan line names, normalized to route
@@ -128,12 +129,18 @@ var (
 func PlanURLs(name string) []PlanURL {
 	var out []PlanURL
 	for _, m := range planURLPattern.FindAllStringSubmatchIndex(name, -1) {
-		if fileExtAfterPath.MatchString(name[m[3]:]) {
-			continue
-		}
 		u := PlanURL{Path: normalizeURL(name[m[2]:m[3]])}
 		if mm := methodBefore.FindStringSubmatch(strings.TrimRight(name[:m[2]], "`'\" ")); mm != nil {
 			u.Method = strings.ToUpper(mm[1])
+		}
+		// "/layout.tsx" is a file, not a URL, unless a method was written in front ("GET /swagger.json").
+		if fileExtAfterPath.MatchString(name[m[3]:]) {
+			if u.Method == "" {
+				continue
+			}
+			if ext := fileExtSuffix.FindString(name[m[3]:]); ext != "" {
+				u.Path += ext // the document the route serves: GET /swagger.json
+			}
 		}
 		out = append(out, u)
 	}
@@ -641,7 +648,7 @@ func parseChecklist(text string, tables bool) []planLine {
 		if m := checklistItemPattern.FindStringSubmatch(line); m != nil {
 			name := strings.TrimSpace(m[2])
 			if name != "" {
-				out = append(out, planLine{name: name, line: i + 1, end: i + 1, unticked: m[1] == " ", context: context, reference: reference && !explicitDeliverable.MatchString(name)})
+				out = append(out, planLine{name: name, line: i + 1, end: i + 1, unticked: m[1] == " " || (m[1] == "" && !doneMarker.MatchString(name)), context: context, reference: reference && !explicitDeliverable.MatchString(name)})
 				active = len(out) - 1
 				indent = len(line) - len(strings.TrimLeft(line, " \t"))
 			}
@@ -706,6 +713,10 @@ var statusCells = map[string]bool{
 	"in progress": true, "wip": true, "tbd": true, "☐": true, "[ ]": true, "⬜": true,
 }
 
+// doneMarker: a line that says it is finished. A line without one, and without a [x] box, claims
+// nothing: a roadmap line, not a statement that the work exists.
+var doneMarker = regexp.MustCompile(`✅|✔|☑`)
+
 var notDoneCells = map[string]bool{
 	"todo": true, "to do": true, "pending": true, "planned": true, "not started": true, "backlog": true, "open": true,
 	"in progress": true, "wip": true, "tbd": true, "☐": true, "[ ]": true, "⬜": true,
@@ -714,6 +725,7 @@ var notDoneCells = map[string]bool{
 // tableRowText joins a row's task cells into one line.
 func tableRowText(row string) (text string, unticked bool) {
 	var cells []string
+	done := false
 	for _, c := range strings.Split(strings.Trim(strings.TrimSpace(row), "|"), "|") {
 		c = strings.TrimSpace(c)
 		low := strings.ToLower(c)
@@ -721,11 +733,14 @@ func tableRowText(row string) (text string, unticked bool) {
 		case c == "" || rowNumberCell.MatchString(c):
 		case statusCells[low]:
 			unticked = unticked || notDoneCells[low]
+			done = done || !notDoneCells[low]
 		default:
 			cells = append(cells, c)
 		}
 	}
-	return strings.Join(cells, " — "), unticked
+	text = strings.Join(cells, " — ")
+	// A row that says nothing about being done claims nothing, like a plain bullet.
+	return text, unticked || (!done && !doneMarker.MatchString(text))
 }
 
 // planLine is one plan item's text and its 1-based line number.

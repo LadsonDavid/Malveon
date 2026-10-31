@@ -170,3 +170,33 @@ func TestNextPagesRouterPaths(t *testing.T) {
 		}
 	}
 }
+
+// prisma-examples: orm/nextjs-graphql/pages/api/graphql.ts. The app is a Next.js package a few folders
+// down (its own package.json lists next), so its pages/ folder is the Pages Router root.
+func TestPagesRouterInANestedNextPackage(t *testing.T) {
+	dir := t.TempDir()
+	w := func(rel, body string) {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+	}
+	w("orm/nextjs-graphql/package.json", `{"dependencies":{"next":"14.0.0"}}`)
+	w("orm/nextjs-graphql/pages/api/graphql.ts", "export default function handler(req, res) { res.status(200).json({}) }\n")
+	w("tools/pages/api/notnext.ts", "export default function handler(req, res) { res.status(200).json({}) }\n")
+	g, err := Extract(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, n := range g.Nodes {
+		if n.Kind == graph.RouteHandler {
+			got[n.Path] = true
+		}
+	}
+	if !got["/api/graphql"] {
+		t.Errorf("the nested Next app's route is missing: %v", got)
+	}
+	if got["/api/notnext"] {
+		t.Errorf("a pages/ folder outside any Next package is not a Pages Router: %v", got)
+	}
+}
