@@ -195,7 +195,7 @@ By default, `malveon check` fails (technically: exits with a non-zero status) if
 
 A few things never block on their own: code flagged as "not in your plan," unfinished-code markers, frontend layout risks, and plan lines malveon couldn't look up (they say nothing about your code). Those are meant for a human to glance at, not proof of a real bug.
 
-Plan work you haven't ticked yet doesn't block either. A `- [ ]` line that's NOT BUILT or HALF BUILT is just not done yet: it's still checked and listed, marked "not ticked in your plan yet, so it doesn't block". A `- [x]` line (the plan says it's done) or a plain `- item` line blocks when the code disagrees, and BROKEN always blocks, ticked or not. Likewise with `--exec`, a command your project doesn't define (no `test` script, say) is reported but doesn't block, as long as something else ran; and a prompt you typed only blocks once your AI agent has been asked to say what it meant and hasn't.
+Plan work you haven't ticked yet doesn't block either. A `- [ ]` line that's NOT BUILT or HALF BUILT is just not done yet: it's still checked and listed, marked "not ticked in your plan yet, so it doesn't block". Some checks are advice, not a failure. A route registered twice, a sentence in your agent's notes that the code does not show, and a new call to an address no route serves are listed under "yours to settle" (verdict NEEDS YOU) and never make a run FAILED or block a commit, because each was wrong in most of the real projects malveon was measured on. A `- [x]` line, or a line with a done marker (a check mark emoji, or a table row whose status says Done), blocks when the code disagrees, and BROKEN always blocks, ticked or not. A plain `- item`, a numbered line or a table row with no status claims nothing: it is checked and counted as "not claimed done yet", never as a problem, so a long roadmap does not read FAILED. (Until v0.4.9 a plain bullet counted as due now.) JSON and text plans are lists of things to build now and still block. Likewise with `--exec`, a command your project doesn't define (no `test` script, say) is reported but doesn't block, as long as something else ran; and a prompt you typed only blocks once your AI agent has been asked to say what it meant and hasn't.
 
 To actually stop a bad commit, wire malveon into a pre-commit hook. Malveon never sets this up for you, here's how to do it yourself:
 
@@ -325,7 +325,7 @@ Either way, it never assumes — even one clear match gets shown to you first: `
 - [x] Cancel order
 ```
 
-Tick a box (`- [x]`) when the plan says that item is done: then malveon blocks if the code disagrees. Unticked items (`- [ ]`) are checked too, but they don't block until you tick them (unless what's there is broken).
+Tick a box (`- [x]`) when the plan says that item is done: then malveon blocks if the code disagrees. Unticked items (`- [ ]`), plain bullets and numbered lines are checked too, but they don't block until you tick them (unless what's there is broken).
 
 The more precise a line, the more precise the answer. "Refund button" gets NOT BUILT if nothing in the code mentions refunds, and SKIPPED (not checked, with the closest routes and pages in your code listed) if some code does but malveon can't tell which. Naming the URL, file or component (`` `POST /api/refunds` ``, `` `RefundButton` ``) lets it check exactly that. Any common URL placeholder style works: `:id`, `[id]`, `<id>`, `{id}`.
 

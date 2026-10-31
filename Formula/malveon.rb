@@ -2,24 +2,24 @@
 class Malveon < Formula
   desc "Checks whether an AI coding agent's claimed-done work actually matches your plan, by reading the real code"
   homepage "https://github.com/LadsonDavid/Malveon"
-  version "0.4.8"
+  version "0.4.9"
   license :cannot_represent # Malveon Beta License, see BETA-LICENSE.txt
 
   on_macos do
     on_arm do
-      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.8/malveon-darwin-arm64"
-      sha256 "6e6cbb65fffad54367e5bc2a58baf14937b29ae2b5cdd451606415b6a143569c"
+      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.9/malveon-darwin-arm64"
+      sha256 "1830e95a31d3400c5d85ad7f32a90908dd8f096bad349e18a9b76ca80c587b7b"
     end
     on_intel do
-      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.8/malveon-darwin-amd64"
-      sha256 "8c839dfbad216cf8dce5ed2a6f77f2fd7764a1546b6cb1335e99cb1765f16c5e"
+      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.9/malveon-darwin-amd64"
+      sha256 "7125a5f2b9626f7339b4f96a20cfa2a21aa359b694792e4d47ab0f9f6bdd751a"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.8/malveon-linux-amd64"
-      sha256 "3bc80abc2b7c53e505bdd6a44720fec0d58f59359ecff0054c65e83a0c47a1fa"
+      url "https://github.com/LadsonDavid/Malveon/releases/download/v0.4.9/malveon-linux-amd64"
+      sha256 "c066d8782dfcf9de7716969377357434019d4159bda28ab929338b2b641063d6"
     end
   end
 
