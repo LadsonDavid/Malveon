@@ -58,7 +58,7 @@ if ($userPath -notlike "*$installDir*") {
 }
 
 Write-Host "Installed to $exePath"
-Write-Host "Next: open a new terminal in your project's folder and run 'malveon scan' (it needs no setup)."
+Write-Host "Next: open a new terminal in your project's folder and run 'malveon' (it needs no setup)."
 
 Write-Host ""
 Write-Host "Want a custom check rule for your stack, or found something broken? Run 'malveon register' -"
