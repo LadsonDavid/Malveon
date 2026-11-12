@@ -43,6 +43,9 @@ var listComments = regexp.MustCompile(`//[^\n]*|/\*(?s:.*?)\*/`)
 func scanJSExports(src string) graph.ExportSet {
 	src = strings.TrimPrefix(src, "\ufeff") // a byte order mark would hide the first line
 	set := graph.ExportSet{Names: map[string]bool{}}
+	if !strings.Contains(src, "export") {
+		return set // every pattern below needs the word
+	}
 
 	for _, m := range exportDeclPattern.FindAllStringSubmatchIndex(src, -1) {
 		if m[2] >= 0 { // export default function name: the name is local, only "default" leaves the file
@@ -72,7 +75,8 @@ func scanJSExports(src string) graph.ExportSet {
 			set.Open = true
 		}
 	}
-	if exportDestructurePattern.MatchString(src) || exportEqualsPattern.MatchString(src) || commonJSExportPattern.MatchString(src) {
+	if (strings.Contains(src, "export") && (exportDestructurePattern.MatchString(src) || exportEqualsPattern.MatchString(src))) ||
+		(strings.Contains(src, "exports") && commonJSExportPattern.MatchString(src)) {
 		set.Open = true
 	}
 	for _, m := range exportVarPattern.FindAllStringIndex(src, -1) {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/LadsonDavid/Malveon/pkg/skipdirs"
 )
 
 // Project-wide facts about how the JavaScript/TypeScript code makes requests,
@@ -47,100 +46,26 @@ var (
 	// function name(a, b) {   async function name(a) {   const name = (a, b) => {   const name = a => {
 	fnWithParams = regexp.MustCompile(`(?:^|\W)(?:async\s+)?function\s+(\w+)\s*(?:<[^()]*>)?\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|` +
 		`\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:function\s*\(([^)]*)\)\s*(?::\s*[^{;]+)?\{|(?:<[^()]*>\s*)?\(([^)]*)\)\s*(?::\s*[^=;{]+)?=>\s*\{?|([\w$]+)\s*=>\s*\{?)`)
-	wordPattern = regexp.MustCompile(`[A-Za-z_$][\w$]*`)
 )
 
 // collectJSInfo reads every JavaScript/TypeScript file under root once.
 func collectJSInfo(root string) *jsInfo {
 	info := &jsInfo{clients: map[string]bool{}, wrappers: map[string]wrapper{}, mentions: map[string]int{}, uses: map[string]int{}}
-	readFile := newReadAhead(root)
-	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if path != root && skipdirs.Names[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		ext := strings.ToLower(filepath.Ext(path))
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = path
-		}
-		rel = filepath.ToSlash(rel)
+	entries, _ := walkFiles(root, false) // an unreadable folder is skipped, as it always was
+	var jsEntries []fileEntry
+	for _, e := range entries {
 		switch {
-		case strings.EqualFold(filepath.Base(path), "package.json"):
-			if raw, err := readFile(path); err == nil {
-				info.addPackage(filepath.ToSlash(filepath.Dir(rel)), raw)
-			}
-			return nil
-		case ext == ".prisma":
-			if raw, err := readFile(path); err == nil {
-				info.addPrisma(string(raw))
-			}
-			return nil
+		case strings.EqualFold(filepath.Base(e.path), "package.json"), e.ext == ".prisma", templateExts[e.ext]:
+			jsEntries = append(jsEntries, e)
+		case e.ext == ".js", e.ext == ".jsx", e.ext == ".ts", e.ext == ".tsx", e.ext == ".mjs", e.ext == ".cjs":
+			jsEntries = append(jsEntries, e)
 		}
-		if templateExts[ext] {
-			// Templates call functions too (onclick="save()", @click="save"):
-			// count what they mention, read nothing else from them.
-			if raw, err := readFile(path); err == nil {
-				countWords(string(raw), info.mentions)
-				countWords(string(raw), info.uses) // plain words, imports included: errs toward "used"
-			}
-			return nil
+	}
+	// Each file is read and counted on its own goroutine; the results are added in walk order.
+	parallelOrdered(len(jsEntries), func(i int) func() { return scanInfoFile(info, root, jsEntries[i]) }, func(_ int, apply func()) {
+		if apply != nil {
+			apply()
 		}
-		switch ext {
-		case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
-		default:
-			return nil
-		}
-		raw, err := readFile(path)
-		if err != nil {
-			return nil
-		}
-		src := string(raw)
-		cm := newCodeMap(src, jsSyntax)
-		countWords(src, info.mentions)
-		countUses(src, cm, info.uses)
-		info.addDrizzle(rel, src, cm)
-		if strings.Contains(src, "NestFactory") || strings.Contains(src, "RouterModule") || strings.Contains(src, "enableVersioning") {
-			info.readNest(src, cm)
-		}
-		for _, m := range clientDecl.FindAllStringSubmatchIndex(src, -1) {
-			if cm.codeAt(src, m[0]) {
-				info.clients[src[m[2]:m[3]]] = true
-			}
-		}
-		for _, m := range fnWithParams.FindAllStringSubmatchIndex(src, -1) {
-			if !cm.codeAt(src, m[0]) {
-				continue
-			}
-			name, params := "", ""
-			switch {
-			case m[2] >= 0:
-				name, params = src[m[2]:m[3]], src[m[4]:m[5]]
-			case m[8] >= 0: // const f = function(a) {
-				name, params = src[m[6]:m[7]], src[m[8]:m[9]]
-			case m[10] >= 0:
-				name, params = src[m[6]:m[7]], src[m[10]:m[11]]
-			case m[12] >= 0:
-				name, params = src[m[6]:m[7]], src[m[12]:m[13]]
-			default:
-				continue
-			}
-			body := functionBody(src, m[1])
-			if len(body) > maxWrapperBody {
-				continue // a request helper is a few lines; a huge body (a bundle's module wrapper) is rescanned at every nesting level
-			}
-			if idx, method, prefix, ok := fetchesParamPrefix(body, params); ok {
-				info.wrappers[name] = wrapper{param: idx, method: method, prefix: prefix}
-			} else {
-				info.noteCandidate(name, params, body)
-			}
-		}
-		return nil
 	})
 	info.chainWrappers()
 	return info
@@ -262,8 +187,8 @@ func withConsts(arg string, consts map[string]string) string {
 // countWords adds every identifier-shaped word in src to counts, without
 // allocating a string per word (the keys are slices of src).
 func countWords(src string, counts map[string]int) {
-	for _, loc := range wordPattern.FindAllStringIndex(src, -1) {
-		counts[src[loc[0]:loc[1]]]++
+	for s, e := nextWord(src, 0); s >= 0; s, e = nextWord(src, e) {
+		counts[src[s:e]]++
 	}
 }
 
@@ -285,3 +210,121 @@ func containsWord(s, w string) bool {
 // maxWrapperBody is the longest function body looked at when searching for a
 // helper that hands its parameter to fetch.
 const maxWrapperBody = 20_000
+
+// fnFinding is what one function declaration told collectJSInfo: it either hands a parameter
+// to fetch (a request helper), or it is a small function that might wrap one.
+type fnFinding struct {
+	name, params, body string
+	helper             wrapper
+	isHelper           bool
+}
+
+// scanInfoFile reads one file for collectJSInfo and returns the function that adds what it found
+// to info. The reading and the counting are the slow part and touch nothing shared; the returned
+// function is run in file order.
+func scanInfoFile(info *jsInfo, root string, e fileEntry) func() {
+	path, ext := e.path, e.ext
+	rel := filepath.ToSlash(e.rel)
+	switch {
+	case strings.EqualFold(filepath.Base(path), "package.json"):
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		return func() { info.addPackage(filepath.ToSlash(filepath.Dir(rel)), raw) }
+	case ext == ".prisma":
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		return func() { info.addPrisma(string(raw)) }
+	}
+	if templateExts[ext] {
+		// Templates call functions too (onclick="save()", @click="save"):
+		// count what they mention, read nothing else from them.
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		words := map[string]int{}
+		countWords(string(raw), words)
+		return func() { // plain words, imports included: errs toward "used"
+			for w, n := range words {
+				info.mentions[w] += n
+				info.uses[w] += n
+			}
+		}
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	src := string(raw)
+	cm := newCodeMap(src, jsSyntax)
+	mentions := map[string]int{}
+	countWords(src, mentions)
+	uses := map[string]int{}
+	countUses(src, cm, uses)
+
+	var clients []string
+	if containsAny(src, "axios.create", "axios.extend", "ky.create", "ky.extend", "got.create", "got.extend") {
+		for _, m := range clientDecl.FindAllStringSubmatchIndex(src, -1) {
+			if cm.codeAt(src, m[0]) {
+				clients = append(clients, src[m[2]:m[3]])
+			}
+		}
+	}
+	var fns []fnFinding
+	if containsAny(src, "function", "=>") { // both alternatives need one
+		for _, m := range fnWithParams.FindAllStringSubmatchIndex(src, -1) {
+			if !cm.codeAt(src, m[0]) {
+				continue
+			}
+			name, params := "", ""
+			switch {
+			case m[2] >= 0:
+				name, params = src[m[2]:m[3]], src[m[4]:m[5]]
+			case m[8] >= 0: // const f = function(a) {
+				name, params = src[m[6]:m[7]], src[m[8]:m[9]]
+			case m[10] >= 0:
+				name, params = src[m[6]:m[7]], src[m[10]:m[11]]
+			case m[12] >= 0:
+				name, params = src[m[6]:m[7]], src[m[12]:m[13]]
+			default:
+				continue
+			}
+			body := functionBody(src, m[1])
+			if len(body) > maxWrapperBody {
+				continue // a request helper is a few lines; a huge body (a bundle's module wrapper) is rescanned at every nesting level
+			}
+			if idx, method, prefix, ok := fetchesParamPrefix(body, params); ok {
+				fns = append(fns, fnFinding{name: name, helper: wrapper{param: idx, method: method, prefix: prefix}, isHelper: true})
+			} else {
+				fns = append(fns, fnFinding{name: name, params: params, body: body})
+			}
+		}
+	}
+	nest := strings.Contains(src, "NestFactory") || strings.Contains(src, "RouterModule") || strings.Contains(src, "enableVersioning")
+	return func() {
+		for w, n := range mentions {
+			info.mentions[w] += n
+		}
+		for w, n := range uses {
+			info.uses[w] += n
+		}
+		info.addDrizzle(rel, src, cm)
+		if nest {
+			info.readNest(src, cm)
+		}
+		for _, c := range clients {
+			info.clients[c] = true
+		}
+		for _, f := range fns {
+			if f.isHelper {
+				info.wrappers[f.name] = f.helper
+			} else {
+				info.noteCandidate(f.name, f.params, f.body)
+			}
+		}
+	}
+}

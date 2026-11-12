@@ -33,6 +33,9 @@ type rawImport struct {
 
 func scanJSImports(src string) []rawImport {
 	var out []rawImport
+	if !containsAny(src, "import", "export", "require") {
+		return out // every pattern below needs one of these words
+	}
 	cm := newCodeMap(src, jsSyntax)
 	// A commented-out import is not an import. The match starts at the
 	// keyword, so that is what must be code.

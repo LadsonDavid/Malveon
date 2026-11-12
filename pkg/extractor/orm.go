@@ -163,7 +163,12 @@ func scanORM(src string, cm codeMap, info *jsInfo) []callSite {
 	}
 
 	mentionsPrisma := strings.Contains(src, "PrismaClient") || strings.Contains(src, "@prisma/client") || strings.Contains(strings.ToLower(src), "prisma")
-	for _, m := range prismaCall.FindAllStringSubmatchIndex(src, -1) {
+	var prismaHits [][]int
+	// Without a schema and without the word Prisma, no match below can be kept.
+	if info != nil && (len(info.prismaModels) > 0 || mentionsPrisma) && containsAny(src, "find", "create", "update", "upsert", "delete", "count", "aggregate", "groupBy") {
+		prismaHits = prismaCall.FindAllStringSubmatchIndex(src, -1)
+	}
+	for _, m := range prismaHits {
 		if !cm.codeAt(src, m[0]) {
 			continue
 		}

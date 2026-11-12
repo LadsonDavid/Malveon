@@ -34,7 +34,11 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 	var sites []callSite
 
 	// useSWR('/api/x'), useQuery('/api/x'), $fetch('/api/x'): a GET unless the options say otherwise.
-	for _, m := range swrCall.FindAllStringIndex(src, -1) {
+	var swrHits [][]int
+	if containsAny(src, "useSWR", "useQuery", "$fetch", "useFetch", "useLazyFetch") {
+		swrHits = swrCall.FindAllStringIndex(src, -1)
+	}
+	for _, m := range swrHits {
 		if !cm.codeAt(src, m[0]) {
 			continue
 		}

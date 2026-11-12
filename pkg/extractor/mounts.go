@@ -34,7 +34,11 @@ func scanJSMounts(src string) []jsMount {
 	cm := newCodeMap(src, jsSyntax)
 	var out []jsMount
 	var imports map[string]string
-	for _, m := range jsUseCall.FindAllStringIndex(src, -1) {
+	var useHits [][]int
+	if containsAny(src, ".use", ".route") {
+		useHits = jsUseCall.FindAllStringIndex(src, -1)
+	}
+	for _, m := range useHits {
 		if !cm.codeAt(src, m[0]) {
 			continue
 		}

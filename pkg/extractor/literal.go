@@ -147,7 +147,10 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		})
 	}
 	// router.route('/p').get(h).post(h): the chained form of the same registration.
-	chains := jsRouteChain.FindAllStringIndex(src, -1)
+	var chains [][]int
+	if strings.Contains(src, ".route") {
+		chains = jsRouteChain.FindAllStringIndex(src, -1)
+	}
 	for ci, m := range chains {
 		if !cm.codeAt(src, m[0]) {
 			continue
@@ -211,7 +214,11 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		}
 	}
 
-	for _, m := range supabaseFromPattern.FindAllStringSubmatchIndex(src, -1) {
+	var supabaseHits [][]int
+	if strings.Contains(src, ".from") {
+		supabaseHits = supabaseFromPattern.FindAllStringSubmatchIndex(src, -1)
+	}
+	for _, m := range supabaseHits {
 		if !cm.codeAt(src, m[0]) {
 			continue
 		}
@@ -280,7 +287,9 @@ var notSupabaseReceivers = map[string]bool{
 // jsFuncRanges finds every named function declaration/assignment in src
 // and returns its name and line span, by locating the opening brace after
 // the signature and walking forward to its balanced match.
-func jsFuncRanges(src string) []funcRange {
+func jsFuncRanges(src string) []funcRange { return factsFor(src).funcRanges() }
+
+func computeJSFuncRanges(src string) []funcRange {
 	cm := newCodeMap(src, jsSyntax)
 	var ranges []funcRange
 	for _, pat := range []*regexp.Regexp{jsFuncDeclPattern, jsFuncAssignPattern} {

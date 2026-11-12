@@ -29,7 +29,10 @@ var (
 // countUses adds the uses found in one JS/TS file to counts.
 func countUses(src string, cm codeMap, counts map[string]int) {
 	var skip [][2]int // spans whose words are not uses
-	for _, re := range []*regexp.Regexp{usesImportStmt, usesExportList} {
+	for i, re := range []*regexp.Regexp{usesImportStmt, usesExportList} {
+		if lit := [...]string{"import", "export"}[i]; !strings.Contains(src, lit) {
+			continue // the pattern cannot match without its keyword
+		}
 		for _, m := range re.FindAllStringSubmatchIndex(src, -1) {
 			if !cm.codeAt(src, m[0]) {
 				continue
@@ -38,7 +41,7 @@ func countUses(src string, cm codeMap, counts map[string]int) {
 			aliasedNames(src[m[2]:m[3]], counts)
 		}
 	}
-	for _, m := range defPatterns["js"].FindAllStringSubmatchIndex(src, -1) {
+	for _, m := range factsFor(src).defMatches() {
 		// `export default function f` keeps its name as a use: it can be imported as anything.
 		if !cm.codeAt(src, m[0]) || strings.Contains(src[m[0]:m[2]], "default") {
 			continue
@@ -48,15 +51,15 @@ func countUses(src string, cm codeMap, counts map[string]int) {
 	sort.Slice(skip, func(i, j int) bool { return skip[i][0] < skip[j][0] })
 
 	next, until := 0, 0
-	for _, w := range wordPattern.FindAllStringIndex(src, -1) {
-		for next < len(skip) && skip[next][0] <= w[0] {
+	for s, e := nextWord(src, 0); s >= 0; s, e = nextWord(src, e) {
+		for next < len(skip) && skip[next][0] <= s {
 			until = max(until, skip[next][1])
 			next++
 		}
-		if w[0] < until {
+		if s < until {
 			continue
 		}
-		counts[src[w[0]:w[1]]]++
+		counts[src[s:e]]++
 	}
 }
 

@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/LadsonDavid/Malveon/pkg/graph"
-	"github.com/LadsonDavid/Malveon/pkg/skipdirs"
 )
 
 // Extract walks root and returns the code graph for every supported
@@ -32,42 +31,38 @@ func Extract(root string) (*graph.Graph, error) {
 	rp := newRemixProject()
 	var tplCalls []tplCall
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path != root && skipdirs.Names[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+	entries, err := walkFiles(root, true)
+	if err != nil {
+		return nil, err
+	}
 
-		var sites []callSite
-		ext := strings.ToLower(filepath.Ext(path))
-
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = path
-		}
-		g.Files = append(g.Files, rel)
+	// Each file is read and scanned on its own goroutine; what a scan finds is then added to the
+	// graph here, one file at a time in walk order, so the graph is the one a sequential run builds.
+	// A file's scan returns the function that adds its findings (nil when it has none).
+	scan := func(i int) func() {
+		e := entries[i]
+		path, rel, ext := e.path, e.rel, e.ext
 		if ext == ".sql" || ext == ".prisma" {
-			if raw, err := os.ReadFile(path); err == nil {
-				readSchema(g, rel, ext, string(raw))
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return nil
 			}
-			return nil
+			return func() { readSchema(g, rel, ext, string(raw)) }
 		}
 		if ext == ".md" || ext == ".mdx" {
+			var nodes []graph.Node
 			for _, site := range astroPageSite(rel, info) {
-				g.Nodes = append(g.Nodes, toNode(rel, site))
+				nodes = append(nodes, toNode(rel, site))
 			}
-			return nil
+			return func() { g.Nodes = append(g.Nodes, nodes...) }
 		}
 		if tplExts[ext] {
-			if raw, err := os.ReadFile(path); err == nil {
-				tplCalls = append(tplCalls, scanTemplateCalls(rel, string(raw))...)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return nil
 			}
-			return nil
+			calls := scanTemplateCalls(rel, string(raw))
+			return func() { tplCalls = append(tplCalls, calls...) }
 		}
 		if !scannedExts[ext] {
 			return nil
@@ -78,29 +73,29 @@ func Extract(root string) (*graph.Graph, error) {
 			return nil // unreadable file: skip, don't fail the whole run
 		}
 		src := string(raw)
-		recordDefs(g, rel, ext, src)
+		defs := computeDefs(rel, ext, src)
 
+		var sites []callSite
+		var links []tplCall
+		var trigs []graph.Trigger
+		var opaque bool
+		var imps []rawImport
+		var exps graph.ExportSet
+		var mnts []jsMount
+		var routers int
+		var pyMnts []pyMountRef
+		var stateful func() []callSite // the scans that remember things between files; they run in file order
 		switch ext {
 		case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
 			sites = scanJSLikeWith(src, info)
-			tplCalls = append(tplCalls, scanJSLinks(rel, src)...)
+			links = scanJSLinks(rel, src)
 			if ext != ".ts" && ext != ".cjs" { // JSX can't be in these
-				trigs, opaque := scanTriggersAndOpaque(src)
-				for _, t := range trigs {
-					t.File = rel
-					g.Triggers = append(g.Triggers, t)
-				}
-				if opaque {
-					if g.OpaqueWiring == nil {
-						g.OpaqueWiring = map[string]bool{}
-					}
-					g.OpaqueWiring[rel] = true
-				}
+				trigs, opaque = scanTriggersAndOpaque(src)
 			}
-			imports[rel] = scanJSImports(src)
-			exports[rel] = scanJSExports(src)
-			mounts[rel] = scanJSMounts(src)
-			routerFiles[rel] = jsRouterCount(src)
+			imps = scanJSImports(src)
+			exps = scanJSExports(src)
+			mnts = scanJSMounts(src)
+			routers = jsRouterCount(src)
 			if IsNextRouteFile(rel) {
 				sites = append(sites, scanNextRouteHandlers(rel, src)...)
 			}
@@ -112,11 +107,13 @@ func Extract(root string) (*graph.Graph, error) {
 			sites = append(sites, scanNest(rel, src, info)...)
 			sites = append(sites, scanSvelteKitServer(rel, src, info)...)
 			sites = append(sites, scanAstroEndpoint(rel, src, info)...)
-			aa.readFile(rel, src, info)
-			if info.projectHasDep("@trpc/") {
-				tp.readFile(rel, src)
+			stateful = func() []callSite {
+				aa.readFile(rel, src, info)
+				if info.projectHasDep("@trpc/") {
+					tp.readFile(rel, src)
+				}
+				return rp.readFile(rel, src, info)
 			}
-			sites = append(sites, rp.readFile(rel, src, info)...)
 		case ".vue", ".svelte", ".astro":
 			// A single-file component makes requests; it never registers server routes.
 			body := blankStyleBlocks(src)
@@ -125,19 +122,25 @@ func Extract(root string) (*graph.Graph, error) {
 					sites = append(sites, s)
 				}
 			}
-			imports[rel] = scanJSImports(body)
+			imps = scanJSImports(body)
 			sites = append(sites, nuxtPageSite(rel, info)...)
 			sites = append(sites, svelteKitPage(rel, src, info)...)
 			sites = append(sites, astroPageSite(rel, info)...)
-			aa.readFile(rel, src, info)
+			stateful = func() []callSite {
+				aa.readFile(rel, src, info)
+				return nil
+			}
 		case ".py":
 			sites = scanPython(src)
-			pyMounts[rel] = scanPyMounts(src)
-			dj.readPython(rel, src)
+			pyMnts = scanPyMounts(src)
+			stateful = func() []callSite {
+				dj.readPython(rel, src)
+				return nil
+			}
 		case ".go":
 			fset, file, perr := parseGoFile(path, src)
 			if perr != nil {
-				return nil // syntax error in one file shouldn't kill the run
+				return func() { defs.apply(g) } // syntax error in one file shouldn't kill the run
 			}
 			sites = scanGo(src, fset, file)
 		case ".rs":
@@ -151,17 +154,51 @@ func Extract(root string) (*graph.Graph, error) {
 		case ".cs":
 			sites = scanDotnet(src)
 		default:
-			return nil
+			return func() { defs.apply(g) }
+		}
+		nodes := make([]graph.Node, 0, len(sites))
+		for _, s := range sites {
+			nodes = append(nodes, toNode(rel, s))
 		}
 
-		for _, s := range sites {
-			g.Nodes = append(g.Nodes, toNode(rel, s))
+		return func() {
+			defs.apply(g)
+			switch ext {
+			case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
+				tplCalls = append(tplCalls, links...)
+				for _, t := range trigs {
+					t.File = rel
+					g.Triggers = append(g.Triggers, t)
+				}
+				if opaque {
+					if g.OpaqueWiring == nil {
+						g.OpaqueWiring = map[string]bool{}
+					}
+					g.OpaqueWiring[rel] = true
+				}
+				imports[rel] = imps
+				exports[rel] = exps
+				mounts[rel] = mnts
+				routerFiles[rel] = routers
+			case ".vue", ".svelte", ".astro":
+				imports[rel] = imps
+			case ".py":
+				pyMounts[rel] = pyMnts
+			}
+			g.Nodes = append(g.Nodes, nodes...)
+			if stateful != nil {
+				for _, s := range stateful() {
+					g.Nodes = append(g.Nodes, toNode(rel, s))
+				}
+			}
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
+	parallelOrdered(len(entries), scan, func(i int, apply func()) {
+		g.Files = append(g.Files, entries[i].rel)
+		if apply != nil {
+			apply()
+		}
+	})
 	resolveImports(g, imports, info)
 	g.Exports = exports
 	g.Uses = make(map[string]int, len(g.Defs))
@@ -240,11 +277,24 @@ var defPatterns = map[string]*regexp.Regexp{
 	"go": regexp.MustCompile(`(?m)^(?:func(?:\s*\([^)]*\))?|type)\s+(\w+)`),
 }
 
-var identPattern = regexp.MustCompile(`[A-Za-z_$][\w$]*`)
 
 // recordDefs indexes where names are defined (functions, classes,
 // components) and where every identifier first appears.
-func recordDefs(g *graph.Graph, rel, ext, src string) {
+func recordDefs(g *graph.Graph, rel, ext, src string) { computeDefs(rel, ext, src).apply(g) }
+
+// fileDefs is what one file defines, found without touching the graph.
+type fileDefs struct {
+	rel   string
+	names map[string]bool
+	defs  []fileDef
+}
+
+type fileDef struct {
+	name string
+	loc  graph.Loc
+}
+
+func computeDefs(rel, ext, src string) fileDefs {
 	var pat *regexp.Regexp
 	switch ext {
 	case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".vue", ".svelte", ".astro":
@@ -254,19 +304,14 @@ func recordDefs(g *graph.Graph, rel, ext, src string) {
 	case ".go":
 		pat = defPatterns["go"]
 	}
-	if g.Defs == nil {
-		g.Defs = map[string][]graph.Loc{}
-		g.Names = map[string]map[string]bool{}
-	}
-	names := map[string]bool{}
-	for _, m := range identPattern.FindAllStringIndex(src, -1) {
-		if name := src[m[0]:m[1]]; len(name) >= 3 {
-			names[name] = true
+	out := fileDefs{rel: rel, names: map[string]bool{}}
+	for s, e := nextWord(src, 0); s >= 0; s, e = nextWord(src, e) {
+		if name := src[s:e]; len(name) >= 3 {
+			out.names[name] = true
 		}
 	}
-	g.Names[rel] = names
 	if pat == nil {
-		return
+		return out
 	}
 	ends := map[string]int{}
 	if pat == defPatterns["js"] {
@@ -277,12 +322,30 @@ func recordDefs(g *graph.Graph, rel, ext, src string) {
 		}
 	}
 	cm := newCodeMap(src, definitionSyntax(ext))
-	for _, m := range pat.FindAllStringSubmatchIndex(src, -1) {
+	matches := [][]int(nil)
+	if pat == defPatterns["js"] {
+		matches = factsFor(src).defMatches()
+	} else {
+		matches = pat.FindAllStringSubmatchIndex(src, -1)
+	}
+	for _, m := range matches {
 		if !cm.codeAt(src, m[0]) {
 			continue // a function named in a comment or a string isn't defined
 		}
 		name := src[m[2]:m[3]]
-		g.Defs[name] = append(g.Defs[name], graph.Loc{File: rel, Line: lineOf(src, m[2]), End: ends[name]})
+		out.defs = append(out.defs, fileDef{name: name, loc: graph.Loc{File: rel, Line: lineOf(src, m[2]), End: ends[name]}})
+	}
+	return out
+}
+
+func (d fileDefs) apply(g *graph.Graph) {
+	if g.Defs == nil {
+		g.Defs = map[string][]graph.Loc{}
+		g.Names = map[string]map[string]bool{}
+	}
+	g.Names[d.rel] = d.names
+	for _, f := range d.defs {
+		g.Defs[f.name] = append(g.Defs[f.name], f.loc)
 	}
 }
 
