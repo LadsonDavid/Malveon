@@ -91,7 +91,7 @@ func (f *fileFacts) funcRanges() []funcRange {
 
 // defMatches are the matches of the JavaScript definition pattern; read-only.
 func (f *fileFacts) defMatches() [][]int {
-	f.defsOnce.Do(func() { f.defs = defPatterns["js"].FindAllStringSubmatchIndex(f.src, -1) })
+	f.defsOnce.Do(func() { f.defs = scanJSDefs(f.src) })
 	return f.defs
 }
 
