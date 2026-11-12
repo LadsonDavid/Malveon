@@ -19,7 +19,8 @@ var (
 	// export default ...  (named or not)
 	exportDefaultPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+default\b`)
 	// export { a, b as c } [from 'm'] · export type { T } [from 'm']
-	exportListPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:type[ \t]+)?\{([^}]*)\}`)
+	// (also after a ; or } on the same line: a minified bundle ends with `;export{a as b}`)
+	exportListPattern = regexp.MustCompile(`(?m)(?:^|[;}])[ \t]*export[ \t]*(?:type[ \t]+)?\{([^}]*)\}`)
 	// export * from 'm' (everything: unknowable) · export * as ns from 'm'
 	exportStarPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:type[ \t]+)?\*[ \t]*(?:as[ \t]+([A-Za-z_$][\w$]*)[ \t]*)?from`)
 	// export const { a } = x · export const [a] = x
@@ -40,6 +41,7 @@ var listComments = regexp.MustCompile(`//[^\n]*|/\*(?s:.*?)\*/`)
 // every later line for a string. Missing an export invents a broken import; counting an
 // export that sits in a comment only hides one. So every match counts.
 func scanJSExports(src string) graph.ExportSet {
+	src = strings.TrimPrefix(src, "\ufeff") // a byte order mark would hide the first line
 	set := graph.ExportSet{Names: map[string]bool{}}
 
 	for _, m := range exportDeclPattern.FindAllStringSubmatchIndex(src, -1) {
@@ -96,6 +98,8 @@ func hasTopLevelComma(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
+		case quote == 0 && c == '\\':
+			i++ // an escaped character (inside a regex literal: \[ ) is not a bracket
 		case quote != 0:
 			if c == '\\' {
 				i++

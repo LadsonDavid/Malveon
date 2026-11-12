@@ -12,7 +12,7 @@ func SourceRole(file string) string {
 	parts := strings.Split(p, "/")
 	for _, s := range parts[:len(parts)-1] {
 		switch s {
-		case "testdata", "__fixtures__", "__mocks__":
+		case "testdata", "__fixtures__", "__mocks__", "fixtures", "fixture", "solution", "solutions":
 			return "fixture"
 		case "__tests__", "cypress", "e2e":
 			return "test"
@@ -21,6 +21,9 @@ func SourceRole(file string) string {
 	b := filepath.Base(p)
 	if strings.HasSuffix(b, "_test.go") || strings.HasSuffix(b, "_test.py") || strings.HasPrefix(b, "test_") && strings.HasSuffix(b, ".py") || b == "conftest.py" {
 		return "test"
+	}
+	if strings.Contains(b, ".fixture.") {
+		return "fixture"
 	}
 	for _, s := range []string{".test.", ".spec.", ".cy."} {
 		if strings.Contains(b, s) {

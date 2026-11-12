@@ -48,6 +48,7 @@ var callMethodNames = map[string]string{
 // hand-rolled scanning, because Go gives us this for free.
 func scanGo(src string, fset *token.FileSet, file *ast.File) []callSite {
 	var sites []callSite
+	groups := ginGroupPrefixes(file)
 
 	ast.Inspect(file, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
@@ -89,6 +90,11 @@ func scanGo(src string, fset *token.FileSet, file *ast.File) []callSite {
 				if method == "" {
 					if m, p, found := splitMethodPattern(lit); found {
 						method, lit = m, p
+					}
+				}
+				if ident, ok := sel.X.(*ast.Ident); ok {
+					if pre := groups[ident.Name]; pre != "" {
+						lit = strconv.Quote(pre + strings.Trim(lit, `"`))
 					}
 				}
 				sites = append(sites, callSite{
@@ -156,4 +162,46 @@ func parseGoFile(path, src string) (*token.FileSet, *ast.File, error) {
 		return nil, nil, err
 	}
 	return fset, f, nil
+}
+
+// ginGroupPrefixes finds `api := e.Group("/companion/api", mw...)` and nested groups, and returns
+// each variable's full prefix. A variable assigned two different prefixes in one file is
+// ambiguous and gets none, so a route is never given a prefix it may not have.
+func ginGroupPrefixes(file *ast.File) map[string]string {
+	prefix := map[string]string{}
+	ambiguous := map[string]bool{}
+	for pass := 0; pass < 4; pass++ { // a group built from another group, a few levels deep
+		ast.Inspect(file, func(n ast.Node) bool {
+			as, ok := n.(*ast.AssignStmt)
+			if !ok || len(as.Lhs) != 1 || len(as.Rhs) != 1 {
+				return true
+			}
+			lhs, ok := as.Lhs[0].(*ast.Ident)
+			call, isCall := as.Rhs[0].(*ast.CallExpr)
+			if !ok || !isCall {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "Group" {
+				return true
+			}
+			lit, ok := firstStringArg(call)
+			if !ok {
+				return true
+			}
+			full := strings.Trim(lit, `"`)
+			if recv, ok := sel.X.(*ast.Ident); ok {
+				full = prefix[recv.Name] + full
+			}
+			if old, seen := prefix[lhs.Name]; seen && old != full && pass == 0 {
+				ambiguous[lhs.Name] = true
+			}
+			prefix[lhs.Name] = full
+			return true
+		})
+	}
+	for name := range ambiguous {
+		delete(prefix, name)
+	}
+	return prefix
 }

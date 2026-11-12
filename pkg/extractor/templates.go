@@ -26,6 +26,8 @@ type tplCall struct {
 	method  string
 	path    string
 	urlName string
+	// link: a plain href, kept only if a route of the project answers that address (links.go)
+	link bool
 }
 
 var (
@@ -83,6 +85,11 @@ func scanTemplateCalls(file, src string) []tplCall {
 		href := attr(tplHrefAttr.FindStringSubmatch(src[m[0]:m[1]]))
 		if tplURLTag.MatchString(href) {
 			add(m[0], "GET", href)
+		} else if strings.HasPrefix(href, "/") && !strings.HasPrefix(href, "//") {
+			// a plain link: a call only when a route of this project serves it (see links.go)
+			if path, _, ok := tplTarget(href); ok {
+				out = append(out, tplCall{file: file, line: lineOf(src, m[0]), method: "GET", path: path, link: true})
+			}
 		}
 	}
 	return out
@@ -132,6 +139,9 @@ func applyTemplateCalls(g *graph.Graph, calls []tplCall, names map[string][]stri
 				continue
 			}
 			path = paths[0]
+		}
+		if c.link && !someRouteServes(g, path) {
+			continue
 		}
 		g.Nodes = append(g.Nodes, graph.Node{
 			Kind: graph.NetworkCall, File: c.file, Line: c.line, Method: c.method,

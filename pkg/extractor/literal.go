@@ -598,6 +598,9 @@ func literalPath(raw string) (string, bool) {
 	if len(raw) < 2 {
 		return "", false
 	}
+	if p, ok := folderPlusValue(raw); ok {
+		return p, true
+	}
 	fstring := false
 	body := raw
 	if (raw[0] == 'f' || raw[0] == 'F') && len(raw) >= 3 && (raw[1] == '"' || raw[1] == '\'') {
@@ -612,6 +615,9 @@ func literalPath(raw string) (string, bool) {
 		return "", false
 	}
 	inner := body[1 : len(body)-1]
+	if strings.IndexByte(inner, quote) >= 0 && quote != '`' {
+		return "", false // '/x/' + a + '.json' starts and ends with a quote but is three pieces, not one string
+	}
 	if fstring && strings.Contains(inner, "{") {
 		return "", false
 	}
@@ -675,4 +681,21 @@ func queryStart(s string) int {
 		}
 	}
 	return -1
+}
+
+// folderPlusValue reads "/api/log/" + building as /api/log/:param: a string ending in a slash
+// followed by one value (a name, a member, a call such as encodeURIComponent(x)) fills a whole
+// path segment, like `${building}` in a template. Anything more (a second +, a condition, a
+// value glued to the text without a slash) is not read.
+var folderPlusValue0 = regexp.MustCompile(`^(["'])(/[^"'$+\\]*/)["']\s*\+\s*([A-Za-z_$][\w$.]*(?:\([^()+?:"']*\))?(?:\[[^\]+?:"']*\])?)\s*$`)
+
+func folderPlusValue(raw string) (string, bool) {
+	if len(raw) < 6 || (raw[0] != '"' && raw[0] != '\'') {
+		return "", false
+	}
+	m := folderPlusValue0.FindStringSubmatch(strings.TrimSpace(raw))
+	if m == nil {
+		return "", false
+	}
+	return m[2] + ":param", true
 }

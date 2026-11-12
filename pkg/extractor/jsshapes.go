@@ -97,11 +97,7 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 
 	// api('/a') where api hands its parameter to fetch.
 	if info != nil && len(info.wrappers) > 0 {
-		names := make([]string, 0, len(info.wrappers))
-		for n := range info.wrappers {
-			names = append(names, regexp.QuoteMeta(n))
-		}
-		call := regexp.MustCompile(`\b(` + strings.Join(names, "|") + `)\s*(?:<[^()]*>)?\s*\(`)
+		call := info.wrapperCall() // compiled once: the helper names are the same for every file
 		for _, m := range call.FindAllStringSubmatchIndex(src, -1) {
 			if !cm.codeAt(src, m[0]) || declaredHere(src, m[0]) {
 				continue
@@ -115,6 +111,8 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 			arg := withConsts(args[w.param], consts)
 			if p, ok := literalPath(arg); !ok || !strings.HasPrefix(p, "/") {
 				continue
+			} else if w.prefix != "" && strings.HasPrefix(w.prefix, "/") {
+				arg = "\"" + w.prefix + p + "\"" // the helper adds its own prefix before fetching
 			}
 			method := w.method
 			if mm := fetchMethodFieldPattern.FindStringSubmatch(argsList); mm != nil {

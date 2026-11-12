@@ -173,11 +173,11 @@ func specBases(file, spec string) (bases []string, project bool) {
 	case strings.HasPrefix(spec, "."):
 		bases, project = []string{path.Join(dir, spec)}, true
 	case strings.HasPrefix(spec, "@/"), strings.HasPrefix(spec, "~/"):
-		bases, project = []string{path.Join("src", spec[2:]), spec[2:], path.Join("app", spec[2:])}, true
+		bases, project = ancestorBases(dir, spec[2:], true), true
 	case strings.HasPrefix(spec, "$lib/"):
 		bases, project = []string{path.Join("src/lib", spec[5:])}, true // SvelteKit
 	default:
-		bases, project = []string{path.Join("src", spec), spec}, false
+		bases, project = ancestorBases(dir, spec, false), false
 	}
 	// TypeScript's ESM style writes the compiled name: './items.js' is items.ts.
 	for _, b := range bases {
@@ -188,4 +188,25 @@ func specBases(file, spec string) (bases []string, project bool) {
 		}
 	}
 	return bases, project
+}
+
+// ancestorBases lists where an alias or baseUrl import (`components/Button`, `@/utils/x`) can
+// point: src/<rest> and <rest> under each folder from the importing file's own up to the project
+// root, closest first. A package inside a monorepo has its own jsconfig/tsconfig, so
+// `components/Elements` in newtab/src/features/ is newtab/src/components/Elements.
+func ancestorBases(dir, rest string, withApp bool) []string {
+	var out []string
+	for d := dir; ; d = path.Dir(d) {
+		if d == "." || d == "/" {
+			d = ""
+		}
+		out = append(out, path.Join(d, "src", rest), path.Join(d, rest))
+		if withApp {
+			out = append(out, path.Join(d, "app", rest))
+		}
+		if d == "" {
+			break
+		}
+	}
+	return out
 }

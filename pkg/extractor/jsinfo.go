@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/LadsonDavid/Malveon/pkg/skipdirs"
 )
@@ -17,6 +18,10 @@ import (
 type jsInfo struct {
 	clients  map[string]bool    // names bound to axios.create(...) / ky.create(...) / got.extend(...)
 	wrappers map[string]wrapper // functions that pass one of their parameters to fetch
+	// candidates: small functions that may wrap a wrapper (jpost -> api -> fetch); see wrapperchain.go
+	candidates []fnCandidate
+	callOnce   sync.Once
+	callRe     *regexp.Regexp
 	// unreferenced: function names that appear exactly once in the whole
 	// project (their own declaration) — nothing calls them.
 	mentions map[string]int
@@ -34,6 +39,7 @@ type jsInfo struct {
 type wrapper struct {
 	param  int    // which argument is the URL
 	method string // "GET" unless its fetch says otherwise
+	prefix string // fetch("/companion/api" + path): the text the helper puts before its parameter
 }
 
 var (
@@ -128,12 +134,15 @@ func collectJSInfo(root string) *jsInfo {
 			if len(body) > maxWrapperBody {
 				continue // a request helper is a few lines; a huge body (a bundle's module wrapper) is rescanned at every nesting level
 			}
-			if idx, method, ok := fetchesParam(body, params); ok {
-				info.wrappers[name] = wrapper{param: idx, method: method}
+			if idx, method, prefix, ok := fetchesParamPrefix(body, params); ok {
+				info.wrappers[name] = wrapper{param: idx, method: method, prefix: prefix}
+			} else {
+				info.noteCandidate(name, params, body)
 			}
 		}
 		return nil
 	})
+	info.chainWrappers()
 	return info
 }
 
@@ -162,6 +171,13 @@ var fetchCall = regexp.MustCompile(`\bfetch\s*\(`)
 // parameters (fetch(p), fetch(BASE + p), fetch(`${BASE}${p}`)). It returns which
 // parameter, and the method fetch uses.
 func fetchesParam(body, params string) (idx int, method string, ok bool) {
+	idx, method, _, ok = fetchesParamPrefix(body, params)
+	return
+}
+
+// fetchesParamPrefix is fetchesParam plus the literal text the helper puts before the
+// parameter: fetch("/companion/api" + path) has the prefix "/companion/api".
+func fetchesParamPrefix(body, params string) (idx int, method string, prefix string, ok bool) {
 	var names []string
 	for _, p := range strings.Split(params, ",") {
 		p = strings.TrimSpace(p)
@@ -177,11 +193,28 @@ func fetchesParam(body, params string) (idx int, method string, ok bool) {
 		}
 		for i, n := range names {
 			if n != "" && containsWord(arg, n) {
-				return i, fetchMethod(readArgsList(body, m[1]-1)), true
+				return i, fetchMethod(readArgsList(body, m[1]-1)), literalPrefix(arg, n), true
 			}
 		}
 	}
-	return 0, "", false
+	return 0, "", "", false
+}
+
+var (
+	concatPrefix   = regexp.MustCompile(`^["']([^"'$]*)["']\s*\+\s*(\w+)\s*$`)
+	templatePrefix = regexp.MustCompile("^`([^`$]*)" + `\$\{\s*(\w+)\s*\}` + "`$")
+)
+
+// literalPrefix: the plain text a fetch argument puts in front of the parameter, from
+// "/api" + p or `/api${p}`. Anything else in front of it (a variable, a call) gives "".
+func literalPrefix(arg, param string) string {
+	arg = strings.TrimSpace(arg)
+	for _, re := range []*regexp.Regexp{concatPrefix, templatePrefix} {
+		if m := re.FindStringSubmatch(arg); m != nil && m[2] == param {
+			return m[1]
+		}
+	}
+	return ""
 }
 
 // unreferenced: a function name found exactly once in the project is only its

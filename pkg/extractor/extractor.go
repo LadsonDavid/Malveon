@@ -83,6 +83,7 @@ func Extract(root string) (*graph.Graph, error) {
 		switch ext {
 		case ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs":
 			sites = scanJSLikeWith(src, info)
+			tplCalls = append(tplCalls, scanJSLinks(rel, src)...)
 			if ext != ".ts" && ext != ".cjs" { // JSX can't be in these
 				trigs, opaque := scanTriggersAndOpaque(src)
 				for _, t := range trigs {

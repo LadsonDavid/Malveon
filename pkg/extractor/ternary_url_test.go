@@ -264,3 +264,18 @@ func TestAHelperThatTakesTheMethodFirst(t *testing.T) {
 		t.Fatalf("the method is the first argument, got %v", got)
 	}
 }
+
+// Found on webbrain-systray: `async function api(method, path)` calls fetch("/companion/api" + path),
+// so api("POST", "/accounts/login") requests /companion/api/accounts/login, not /accounts/login.
+func TestAHelperThatPrefixesTheAddressKeepsItsPrefix(t *testing.T) {
+	got := callsIn(t, map[string]string{
+		"panel/app.js": "async function api(method, path, body) {\n  const res = await fetch(\"/companion/api\" + path, { method, body: JSON.stringify(body) });\n  return res.json();\n}\nasync function viaTemplate(p) { return fetch(`/v2${p}`); }\nrun(async () => { await api(\"POST\", \"/accounts/login\", {}); await viaTemplate(\"/things\"); });\n",
+	})
+	seen := map[string]bool{}
+	for _, c := range got {
+		seen[c] = true
+	}
+	if !seen["POST /companion/api/accounts/login"] || !seen["GET /v2/things"] {
+		t.Fatalf("the helper's own prefix belongs to the address, got %v", got)
+	}
+}
