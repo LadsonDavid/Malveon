@@ -77,30 +77,24 @@ func promisedChange(name string, files []string) string {
 // session started. It replaces the finding checkFile made (a file existing,
 // or the unrelated routes it calls, says nothing about the line's promise):
 //
-//   - file unchanged → NOT BUILT, a plain fact
+//   - file unchanged → unchecked: the behavior may already exist
 //   - file changed   → the old finding, plus a note that malveon sees the file
 //     changed, not that the promised addition is there
 //
 // A finding that is already a proven problem (BROKEN) stays as it is.
-func sessionChange(g *graph.Graph, fd finding, ref, promise string, changed map[string]bool, inSession bool) finding {
+func sessionChange(g *graph.Graph, fd finding, ref, promise string, changed map[string]bool, _ bool) finding {
 	files := g.FindFiles(ref)
 	if len(files) == 0 || fd.verdict == Broken || fd.verdict == NotBuilt {
 		return fd
 	}
 	file := files[0]
 	if !changed[filepath.ToSlash(file)] {
-		// A prompt was typed during the session, so an untouched file is not done.
-		// A plan document may describe work finished before it: malveon can't tell,
-		// and says so rather than claiming NOT BUILT (sweep 2026-10-12).
-		if !inSession {
-			return finding{verdict: Skipped, evidence: []string{file}, spans: fd.spans,
-				reason: fmt.Sprintf("`%s` exists, but it hasn't changed since this session started, and this line says it \"%s\" — "+
-					"malveon can't tell whether it already did that before the session or still doesn't; "+
-					"name the new component or function in backticks and malveon will look for it", file, promise)}
-		}
-		return finding{verdict: NotBuilt, evidence: []string{file}, spans: fd.spans,
+		// Prompt timing does not establish whether the requested behavior was
+		// already present. Keep absence of edits separate from absence of behavior.
+		return finding{verdict: Skipped, evidence: []string{file}, spans: fd.spans,
 			reason: fmt.Sprintf("`%s` exists, but it hasn't changed since this session started, and this line says it \"%s\" — "+
-				"if it already did that before the session, name the new component or function in backticks so malveon can look for it", file, promise)}
+				"malveon can't tell whether it already did that before the session or still doesn't; "+
+				"no source edit is not proof of missing behavior; independent source or behavior evidence is needed", file, promise)}
 	}
 	fd.verdict = Skipped
 	fd.pairs = nil

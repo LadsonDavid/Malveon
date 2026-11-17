@@ -339,11 +339,14 @@ func triggersOf(src string, cm codeMap, at int, el jsxOpen, stack []openEl) (mad
 		if ts := byEvent(); len(ts) > 0 {
 			return ts, false
 		}
-		if _, ok := el.attr("href"); ok {
-			return []graph.Trigger{mk("", graph.Handler{Kind: graph.HandlerNavigates})}, false
-		}
-		if _, ok := el.attr("to"); ok {
-			return []graph.Trigger{mk("", graph.Handler{Kind: graph.HandlerNavigates})}, false
+		for _, name := range []string{"href", "to"} {
+			if a, ok := el.attr(name); ok {
+				t := mk("", graph.Handler{Kind: graph.HandlerNavigates})
+				if a.kind == attrString && strings.HasPrefix(a.value, "/") && !strings.HasPrefix(a.value, "//") {
+					t.NavigationTarget = strings.SplitN(strings.SplitN(a.value, "?", 2)[0], "#", 2)[0]
+				}
+				return []graph.Trigger{t}, false
+			}
 		}
 		return nil, false
 	}

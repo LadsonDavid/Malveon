@@ -181,7 +181,7 @@ func TestNoChangedSetBehavesAsBefore(t *testing.T) {
 // malveon can't tell which. So a plan-document line says so (SKIPPED, unchecked:
 // name the new thing) instead of claiming NOT BUILT. A prompt is typed
 // during the session by definition, so an untouched file there really is not done.
-func TestUnchangedFileIsOnlyNotBuiltForPrompts(t *testing.T) {
+func TestUnchangedFileRemainsUncheckedForPlansAndPrompts(t *testing.T) {
 	g := changedGraph(t)
 	line := "`" + menuFile + "` adds a report option to the post menu for non-authors"
 	none := map[string]bool{}
@@ -190,14 +190,14 @@ func TestUnchangedFileIsOnlyNotBuiltForPrompts(t *testing.T) {
 	if plan.Verdict != Skipped || !plan.Unchecked {
 		t.Fatalf("plan line: %s (%s), want SKIPPED and unchecked", plan.Verdict, plan.Reason)
 	}
-	for _, want := range []string{"hasn't changed since this session started", "can't tell", "in backticks"} {
+	for _, want := range []string{"hasn't changed since this session started", "can't tell", "not proof of missing behavior"} {
 		if !strings.Contains(plan.Reason, want) {
 			t.Errorf("reason %q should say %q", plan.Reason, want)
 		}
 	}
 
 	prompt := RunWithChanges(g, []features.Feature{{ID: "p", Name: line, InSession: true}}, none)[0]
-	if prompt.Verdict != NotBuilt {
-		t.Fatalf("prompt line: %s (%s), want NOT BUILT", prompt.Verdict, prompt.Reason)
+	if prompt.Verdict != Skipped || !prompt.Unchecked {
+		t.Fatalf("prompt line: %s (%s), want SKIPPED and unchecked", prompt.Verdict, prompt.Reason)
 	}
 }

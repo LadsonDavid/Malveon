@@ -10,6 +10,7 @@ import (
 // callSite is a raw hit before we've decided whether its argument is a
 // resolvable literal.
 type callSite struct {
+	pageNavigation bool
 	kind           graph.Kind
 	method         string // "" if not applicable
 	line           int

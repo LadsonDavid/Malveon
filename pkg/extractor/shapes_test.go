@@ -127,3 +127,32 @@ func TestPythonStubHandlers(t *testing.T) {
 		}
 	}
 }
+
+// Found on the feature-2 bench (2026-11-15): the Next.js starter writes `useSWR<User>('/api/user', fetcher)`,
+// with a type argument before the bracket. The call pattern needed `(` straight after the name, so none of
+// those calls were read: a route renamed under them looked untouched. A type argument is part of the call.
+func TestUseSWRWithATypeArgumentIsStillACall(t *testing.T) {
+	src := "const a = useSWR<User>('/api/user', fetcher);\nconst b = useSWR<Array<Team>>('/api/team', fetcher);\nconst c = useQuery<Row[], Error>('/api/rows');\nconst d = useSWR('/api/plain', fetcher);\n"
+	got := map[string]string{}
+	for _, s := range scanJSLike(src) {
+		if s.kind == graph.NetworkCall {
+			p, _ := literalPath(s.argRaw)
+			got[p] = s.method
+		}
+	}
+	for _, p := range []string{"/api/user", "/api/team", "/api/rows", "/api/plain"} {
+		if got[p] != "GET" {
+			t.Errorf("%s: got %q, want GET (all: %v)", p, got[p], got)
+		}
+	}
+}
+
+// A comparison that merely looks like a type argument is not a call.
+func TestALessThanAfterTheNameIsNotACall(t *testing.T) {
+	src := "const ok = useSWR < 3 && other('/api/x');\n"
+	for _, s := range scanJSLike(src) {
+		if s.kind == graph.NetworkCall {
+			t.Errorf("a comparison is not a call: %+v", s)
+		}
+	}
+}

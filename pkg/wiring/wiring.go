@@ -170,6 +170,22 @@ func evaluate(g *graph.Graph, f features.Feature, changed map[string]bool) Resul
 		anchorText = strings.Replace(anchorText, citation, "", 1)
 	}
 	anchors := anchorsIn(anchorText)
+	var removalTargets map[string]bool
+	if removal {
+		hasFile := false
+		for _, a := range anchors {
+			hasFile = hasFile || a.kind == fileAnchor
+		}
+		if hasFile {
+			removalTargets = fileRemovalTargets(anchorText, anchors)
+			if len(removalTargets) == 0 {
+				base.Verdict, base.Unchecked = Skipped, true
+				base.Reason = "File presence alone cannot show that this removal was not done. Only direct file-deletion targets are checked here; content or ambiguous removals remain unverified."
+				base.CoverageLimit = base.Reason
+				return base
+			}
+		}
+	}
 	// A line whose only anchors are files, saying one will gain something, is
 	// judged by whether the file changed this session. A URL or code name in
 	// the line decides it as always; so does a removal or a line that only
@@ -185,7 +201,7 @@ func evaluate(g *graph.Graph, f features.Feature, changed map[string]bool) Resul
 	var found []finding
 	var dataNames []string
 	for _, a := range anchors {
-		if removal && a.kind != fileAnchor {
+		if removal && (a.kind != fileAnchor || !removalTargets[a.text]) {
 			continue // only a named file can be checked for "is it gone"
 		}
 		switch a.kind {
@@ -604,7 +620,7 @@ func checkPath(g *graph.Graph, a anchor, needsCaller bool) (finding, bool) {
 	}
 
 	if pages := g.PagesAt(p); len(pages) > 0 {
-		s := span{file: pages[0].File, label: "page " + p}
+		s := span{file: pages[0].File, label: "page " + p, url: p}
 		return checkSpan(g, s, fmt.Sprintf("page %s exists (%s)", p, pages[0].File)), true
 	}
 	if calls := g.CallsTo(p); len(calls) > 0 {

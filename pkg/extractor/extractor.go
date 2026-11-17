@@ -277,7 +277,6 @@ var defPatterns = map[string]*regexp.Regexp{
 	"go": regexp.MustCompile(`(?m)^(?:func(?:\s*\([^)]*\))?|type)\s+(\w+)`),
 }
 
-
 // recordDefs indexes where names are defined (functions, classes,
 // components) and where every identifier first appears.
 func recordDefs(g *graph.Graph, rel, ext, src string) { computeDefs(rel, ext, src).apply(g) }
@@ -351,6 +350,7 @@ func (d fileDefs) apply(g *graph.Graph) {
 
 func toNode(file string, s callSite) graph.Node {
 	n := graph.Node{
+		PageNavigation: s.pageNavigation,
 		Kind:           s.kind,
 		File:           file,
 		Line:           s.line,

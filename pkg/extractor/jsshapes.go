@@ -13,14 +13,15 @@ import (
 // its URL parameter to fetch (api('/a')).
 
 var (
-	swrCall = regexp.MustCompile(`\b(?:useSWR|useSWRImmutable|useSWRInfinite|useQuery|\$fetch|useFetch|useLazyFetch)\s*\(`)
+	swrCall = regexp.MustCompile(`\b(?:useSWR|useSWRImmutable|useSWRInfinite|useQuery|\$fetch|useFetch|useLazyFetch)\s*(?:<[^()\n]*?>)?\s*\(`)
 	// () => `/api/x/${id}` — a URL that follows reactive state (Nuxt's useFetch, SWR)
 	arrowURL = regexp.MustCompile(`(?s)^(?:async\s*)?\(\s*\)\s*=>\s*\(?\s*(.+?)\s*\)?$`)
 	// <form action="/api/e" method="post">
-	formTag    = regexp.MustCompile(`(?is)<form\b[^>]*>`)
-	formAction = regexp.MustCompile(`(?is)\baction\s*=\s*["']([^"']+)["']`)
-	formMethod = regexp.MustCompile(`(?is)\bmethod\s*=\s*["'](\w+)["']`)
-	clientCall = regexp.MustCompile(`(?i)\b(\w+)\.(get|post|put|delete|patch)\s*\(`)
+	formTag       = regexp.MustCompile(`(?is)<form\b[^>]*>`)
+	formAction    = regexp.MustCompile(`(?is)\baction\s*=\s*["']([^"']+)["']`)
+	formMethod    = regexp.MustCompile(`(?is)\bmethod\s*=\s*["'](\w+)["']`)
+	formMethodAny = regexp.MustCompile(`(?i)\bmethod\s*=`)
+	clientCall    = regexp.MustCompile(`(?i)\b(\w+)\.(get|post|put|delete|patch)\s*\(`)
 )
 
 var bodyKey = regexp.MustCompile(`\bbody\s*[:,}]`)
@@ -65,10 +66,11 @@ func scanJSShapes(src string, cm codeMap, consts map[string]string, info *jsInfo
 			continue
 		}
 		method := "GET" // the HTML default
-		if mm := formMethod.FindStringSubmatch(tag); mm != nil {
+		mm := formMethod.FindStringSubmatch(tag)
+		if mm != nil {
 			method = strings.ToUpper(mm[1])
 		}
-		sites = append(sites, callSite{kind: graph.NetworkCall, method: method, line: lineOf(src, m[0]), argRaw: `"` + a[1] + `"`})
+		sites = append(sites, callSite{kind: graph.NetworkCall, method: method, line: lineOf(src, m[0]), argRaw: `"` + a[1] + `"`, pageNavigation: method == "GET" && (mm != nil || !formMethodAny.MatchString(tag))})
 	}
 
 	// api.get('/x') where api = axios.create(...).

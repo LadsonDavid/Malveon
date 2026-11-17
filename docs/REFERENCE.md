@@ -1,5 +1,13 @@
 # malveon reference
 
+v0.5.5: direct verb-plus-file targets/lists and file-plus-delete annotations can be checked for source absence. A scoped paragraph/label/import/navigation removal is not treated as deletion of its containing file. Only filenames in the parsed direct target list are deletion objects; parenthetical context filenames are excluded. Partial or unsupported wording is SKIPPED/Unchecked, never silently passed. DELETE HTTP method claims keep existing API checks. Literal-text absence belongs to its independent source checker. Runtime behavior remains unverified.
+
+v0.5.5: sessionChange treats a file-only behavior claim without edits as SKIPPED/Unchecked regardless of Feature.InSession. Existing behavior may already satisfy a new request. The report preserves the unchanged-file observation without asserting NOT BUILT or requiring a fabricated edit/new symbol. Missing file/symbol evidence and broken connections are not weakened. A changed file likewise remains insufficient to prove its promised behavior. InSession remains origin metadata; no baseline reset or runtime test is implied. Runtime behavior remains unverified.
+
+v0.5.5: Trigger.NavigationTarget retains literal local href/to values for supported JSX links, with query/fragment suffixes removed. A claim using link/links may use those navigation facts to reach a matching known page within the existing source/import scope. Plain URL strings, comments, dynamic targets and another named component's link cannot substitute. A page span retains its URL for this comparison. Navigation does not establish imports, API requests, rendering or execution, and the rule is not applied to rendering-only claims. Runtime behavior remains unverified.
+
+v0.5.5: graph nodes retain provenance for literal GET form actions, including the omitted-method default. RoutesServingCall may return matching known pages for those nodes; RoutesServing remains the API-handler inventory. POST forms, fetch calls, unknown-method expressions and inferred/tail-only targets do not acquire this page exception. Supported page matching handles route groups and dynamic segments. Resolution does not prove form rendering, query handling or completion. Runtime behavior remains unverified.
+
 The full details behind the [README](../README.md): every check, the plan file, `malveon.json`, agent hooks, MCP, storage, telemetry and licensing. Start with the README; come here when you need the exact rule.
 
 ## The six commands, and `malveon account` (local source, unreleased; replaces the older command list below)

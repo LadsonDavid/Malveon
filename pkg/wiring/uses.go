@@ -61,6 +61,7 @@ func checkClaimedUses(g *graph.Graph, found []finding, line string) []finding {
 		return found
 	}
 	linked := usesVerbPattern.MatchString(line)
+	pageLink := pageLinkVerbPattern.MatchString(line)
 	for _, e := range ents {
 		if e.s.route {
 			continue // a route is the other end of the claim, never the claimed thing
@@ -85,10 +86,10 @@ func checkClaimedUses(g *graph.Graph, found []finding, line string) []finding {
 		var hit connection
 		unsure := false
 		for _, o := range others {
-			c, u := connect(g, e.s, o)
+			c, u := connect(g, e.s, o, pageLink)
 			if c.how == "" {
 				var back bool
-				c, back = connect(g, o, e.s)
+				c, back = connect(g, o, e.s, pageLink)
 				u = u || back
 			}
 			if c.how != "" {
@@ -112,6 +113,8 @@ func checkClaimedUses(g *graph.Graph, found []finding, line string) []finding {
 // usesVerbPattern: the line says one thing uses, renders, calls or loads another.
 var usesVerbPattern = regexp.MustCompile(`(?i)\b(?:uses?|using|used by|renders?|rendered|shows?|displays?|imports?|imported|calls?|called|loads?|wraps?|includes?|contains?|mounts?|embeds?|opens?|triggers?|sends?|posts?|fetch(?:es)?|reads?|exports?|wires?|hooks?|connects?|links?)\b`)
 
+var pageLinkVerbPattern = regexp.MustCompile(`(?i)\blinks?\b`)
+
 // connection is how one named thing reaches another: from's code (or the
 // files it imports, or the routes it calls) uses to.
 type connection struct {
@@ -119,10 +122,13 @@ type connection struct {
 	how      string // where: "src/lib/x.ts", "src/a.tsx:12"
 	viaFile  bool   // reached through another file rather than its own code
 	viaProp  bool   // the component's parent hands it what makes the request
+	viaLink  bool   // literal navigation to a known page, not a code import/API call
 }
 
 func (c connection) sentence() string {
 	switch {
+	case c.viaLink:
+		return fmt.Sprintf("%s links to %s (%s); source navigation only, not rendered behavior", c.from.label, c.to.label, c.how)
 	case c.viaProp:
 		return fmt.Sprintf("%s is handed what makes the request by its parent (%s)", c.from.label, c.how)
 	case c.to.route:
@@ -137,8 +143,26 @@ func (c connection) sentence() string {
 // from's code or what it reaches; otherwise to's file imported, or to's name
 // mentioned, in the code from reaches. unsure is true when some of that code
 // couldn't be read (imports are followed in JS/TS only), so "no" proves nothing.
-func connect(g *graph.Graph, from, to span) (c connection, unsure bool) {
+func connect(g *graph.Graph, from, to span, allowPageLink bool) (c connection, unsure bool) {
 	files, unsure := reachedFiles(g, from)
+	if allowPageLink && !to.route && to.url != "" && to.name == "" {
+		for _, page := range g.PagesAt(to.url) {
+			if page.File != to.file {
+				continue
+			}
+			for _, t := range g.Triggers {
+				if t.Handler.Kind != graph.HandlerNavigates || t.NavigationTarget == "" || !hasString(files, t.File) {
+					continue
+				}
+				if from.to != 0 && t.File == from.file && (t.Line < from.from || t.Line > from.to) {
+					continue
+				}
+				if graph.PathsMatch(t.NavigationTarget, page.Path) {
+					return connection{from: from, to: to, how: triggerLoc(t), viaLink: true}, unsure
+				}
+			}
+		}
+	}
 	if to.route {
 		for _, r := range g.Nodes {
 			if r.Kind != graph.RouteHandler || r.File != to.file || r.Path != to.url || (to.method != "" && r.Method != to.method) {

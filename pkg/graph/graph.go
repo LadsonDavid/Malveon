@@ -50,6 +50,7 @@ type Loc struct {
 
 // Node is one extracted call or route registration.
 type Node struct {
+	PageNavigation bool // literal browser GET form; may be served by a known page rather than an API handler
 	Kind           Kind
 	File           string
 	Line           int
@@ -182,12 +183,13 @@ type Handler struct {
 // or any element given an event handler (onClick, onSubmit, ...). One element
 // with two handlers makes two triggers.
 type Trigger struct {
-	File    string
-	Line    int
-	Tag     string // as written: button, form, a, Link, Modal
-	Label   string // the visible text, when it is plain text
-	Event   string // onClick, onSubmit, action; "" when none is attached
-	Handler Handler
+	NavigationTarget string // literal local link href/to; not an API call or execution proof
+	File             string
+	Line             int
+	Tag              string // as written: button, form, a, Link, Modal
+	Label            string // the visible text, when it is plain text
+	Event            string // onClick, onSubmit, action; "" when none is attached
+	Handler          Handler
 }
 
 // Graph is the flat set of nodes a run produced, plus the plain facts a
@@ -399,6 +401,15 @@ type Pair struct {
 // (Node.Tail) is also served by a route whose path ends with it.
 func (g *Graph) RoutesServingCall(c Node) []Node {
 	routes := g.RoutesServing(c.Path)
+	// A GET form navigates to a page. Do not extend this to fetch calls,
+	// POST forms, inferred targets or tail-only addresses.
+	if c.PageNavigation && c.Method == "GET" && c.Confidence == Extracted && !c.Tail && !c.External {
+		for _, p := range g.PagesAt(c.Path) {
+			if !p.InTest {
+				routes = append(routes, p)
+			}
+		}
+	}
 	if !c.Tail {
 		return routes
 	}

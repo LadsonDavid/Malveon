@@ -35,10 +35,8 @@ type Feature struct {
 	// plain bullet, and JSON/text plans carry no tick and stay due now.
 	Unticked bool `json:"unticked,omitempty"`
 
-	// InSession is true for a line written during this session — the user's
-	// own prompt. A file unchanged since the session started is then really
-	// not done; for a plan document it proves nothing (the plan may describe
-	// work finished before the session).
+	// InSession identifies a line written during this session. Prompt timing
+	// alone cannot prove that an edit is required or that behavior is absent.
 	InSession bool `json:"-"`
 
 	// TableRow is true for a line read from a Markdown table row. A row that

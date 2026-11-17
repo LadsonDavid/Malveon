@@ -4,6 +4,8 @@
 
 An AI coding agent reports back confidently. The button it says it built has no click handler. The form posts to a route that does not exist. It quietly added a database table you never asked for. malveon reads the real code, never the agent's word, and answers with the file and line that prove it. If it cannot prove something, it says so instead of guessing.
 
+v0.5.5 improves source connections for literal GET forms and page links. Unchanged files and requests to remove content within a file remain unverified when the available evidence cannot establish behavior; they are not automatically accused as missing work. See the [reference](docs/REFERENCE.md) for supported boundaries.
+
 ## Try it in 30 seconds
 
 No plan, no setup. In your project's folder:
