@@ -83,6 +83,20 @@ irm https://get.malveon.com/install.ps1 | iex
 
 Or `npm install -g malveon`, Homebrew, Scoop, or the VS Code / Cursor extension (search "malveon"). winget is submitted and waiting for review. Open a new terminal and type `malveon`. One file, nothing else to install. Your first 150 runs of a check you start yourself are counted in a footer line; nothing stops at the limit in this release. More ways and the checksum and signature details: [Install](docs/REFERENCE.md#install).
 
+## Plugins for Claude Code, Codex and Cursor
+
+A plugin adds Malveon's tools (`malveon_check`, `malveon_scan` and the rest) to your agent and a skill that tells it to run Malveon before it says a task is done. It needs Node.js; it runs `npx malveon@0.5.7 mcp`, which downloads the signed program on first use.
+
+```
+/plugin marketplace add LadsonDavid/Malveon        # Claude Code
+/plugin install malveon@malveon
+
+codex plugin marketplace add LadsonDavid/Malveon   # Codex
+codex plugin add malveon@malveon
+```
+
+Cursor: the repo has a Cursor marketplace file, but it has only been checked against Cursor's documentation, not run in Cursor. The plugin does not turn on prompt capture or the notice at "done"; run `malveon on` for that.
+
 ## What it does not do
 
 It reads code. It never checks a deployed site, and it starts your app only when you give it the command yourself and approve it once (`--layout --start`, optional). It opens a browser only for the optional layout check described in [the reference](docs/REFERENCE.md#every-check-in-detail) (your own Chrome or Edge, headless, on pages from your files or an app on your machine), so it cannot prove a real click works or that your business logic is right. It lists a short set of faults and says what it did not judge, so a quiet result is not a clean bill of health. Full list: [what it can't do](docs/REFERENCE.md#what-it-cant-do-yet).

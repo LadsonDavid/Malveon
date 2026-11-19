@@ -1,0 +1,13 @@
+{
+  "name": "malveon",
+  "owner": { "name": "Malveon", "url": "https://github.com/LadsonDavid/Malveon" },
+  "metadata": { "description": "Malveon: check AI agent work against the real code" },
+  "plugins": [
+    {
+      "name": "malveon",
+      "source": "./plugins/malveon",
+      "description": "Checks whether your AI agent's work matches what you asked for, by reading the real code.",
+      "version": "0.5.7"
+    }
+  ]
+}
