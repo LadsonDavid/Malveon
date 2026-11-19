@@ -48,7 +48,7 @@ The headline is one of `Found problems` (something malveon trusts is wrong), `Wo
 
 ```
 malveon          check now (add --plan FILE to check a plan, --since REF for recent commits)
-malveon on       turn on automatic checks for your AI agent (shows the change, asks once)
+malveon on       set up automatic checks across your agent projects
 malveon off      turn them off (--for 2h to pause)
 malveon status   what is on, and what malveon saw last
 malveon settle   say a finding is wrong, or confirm what your AI was asked
@@ -65,7 +65,7 @@ Give it a checklist of what the AI should build (a plain `PLAN.md` with `- [ ]` 
 malveon --plan PLAN.md
 ```
 
-Each item comes back built and connected, broken, missing, half done, or skipped when there is nothing in the code to look up. For automatic prompt capture and warnings, run `malveon on` (it shows exactly what it will change and asks once). Older notes in the reference may still use the retired command names; each prints its replacement. Configuration is not execution proof; check `malveon status` after a real prompt. Details: [the plan file](docs/REFERENCE.md#the-plan-file), [failing a build yourself](docs/REFERENCE.md#failing-a-build-yourself), [using it from your AI agent](docs/REFERENCE.md#use-it-from-your-ai-agent-mcp).
+Each item comes back built and connected, broken, missing, half done, or skipped when there is nothing in the code to look up. For automatic prompt capture and warnings, run `malveon on` once and press Enter to confirm. Open a new agent session to start working. Folders without Git get source checks, and checks that compare changes need Git history. Older notes in the reference may still use the retired command names; each prints its replacement. Configuration is not execution proof; check `malveon status` after a real prompt. Details: [the plan file](docs/REFERENCE.md#the-plan-file), [failing a build yourself](docs/REFERENCE.md#failing-a-build-yourself), [using it from your AI agent](docs/REFERENCE.md#use-it-from-your-ai-agent-mcp).
 
 ## Install
 

@@ -15,7 +15,7 @@ The full details behind the [README](../README.md): every check, the plan file, 
 | Command | What it does |
 |---|---|
 | `malveon` | Check this project now. With a saved plan or captured prompts it checks the work against them; otherwise it just looks. `--since <ref>` checks what changed after a commit (the commit messages stand in for the request), `--plan <file>` checks a plan (repeatable), `--run` also runs your own build, lint, type and test scripts, `--all` shows everything, `--json <path\|->` writes findings as JSON, `--exclude <dir>` skips a folder, `--layout` opens pages in your own Chrome or Edge. Changes nothing in your project. |
-| `malveon on` | One yes/no question after showing exactly what it will change: opens a session, sets up each agent folder it finds (prompt capture and warnings), copies the program to a steady place so the hooks survive an update, and starts a background watcher. Warn-only. |
+| `malveon on` | Set up automatic checks across your agent projects. Run it once, press Enter to confirm, then open a new agent session. Detection looks for agent programs on PATH or at known desktop install locations. Folder settings alone do not select an agent. Use `--agent` to name one, or `--details` to preview the files and commands. `--root <folder>` limits setup and the watcher to that folder. If agent setup is skipped, Malveon can watch the current project folder. Git is optional for source checks and required for before/after comparisons. |
 | `malveon off [--for 2h]` | Pauses the warnings and stops the watcher. Needs a real terminal. |
 | `malveon status [--json] [--rules]` | Is it on, the last look and its age, whether the watcher is alive, which agents are set up, which languages it reads here (and how much of each), and where its files are. |
 | `malveon settle` | Answers only you can give, from a real terminal: `looked <n>` marks a finding "Not a problem" (hidden until the code under it changes), `<n> right\|wrong`, `promote <RULE>`, `confirm <n>`, `waive <n> <words>`, `drop <n>`, `plan`. An agent's shell is refused. |
@@ -32,7 +32,7 @@ The full details behind the [README](../README.md): every check, the plan file, 
 
 **Settings** are no longer a `malveon.json` in your project. They are saved in malveon's own folder for the project (`malveon status` prints it). A `malveon.json` left by an older version is copied there once (checked by SHA-256) and then ignored; if it differs from the saved settings, the saved ones win and `status` says so. A fresh clone, another machine or a throwaway cloud environment therefore starts without your plan files and answers.
 
-**The watcher** (`malveon on` starts it, `malveon off` stops it) polls your files once a second, waits until they stop changing for three seconds (longer after a slow look), looks, and tells you only what is new. Each finding is said once; only the ones malveon trusts make a notice, which the watcher writes to `<data folder>/watch/notices.log` (it has no terminal) and `malveon status` prints the newest three; the rest wait in a list with their age (`<data folder>/watch/live.json`). Nothing interrupts your terminal or your agent: run `malveon status` to see them. It always re-reads the whole project (no incremental scan yet), so on a large project results arrive late. A dead watcher shows as "watcher stopped" in `status`.
+**The folder watcher** (`malveon on --root <folder>` starts it, `malveon off` stops it) polls your files once a second, waits until they stop changing for three seconds (longer after a slow look), looks, and tells you only what is new. Each finding is said once; only the ones malveon trusts make a notice, which the watcher writes to `<data folder>/watch/notices.log` (it has no terminal) and `malveon status` prints the newest three; the rest wait in a list with their age (`<data folder>/watch/live.json`). Nothing interrupts your terminal or your agent: run `malveon status` to see them. It always re-reads the whole project (no incremental scan yet), so on a large project results arrive late. A dead watcher shows as "watcher stopped" in `status`.
 
 ## v0.4.6 integrity changes
 
@@ -127,7 +127,7 @@ You don't need a plan, a session or any setup for the first look.
 
 1. In your project's folder, run `npx malveon` (no install; [or install it](#install) and run `malveon`). It lists buttons that do nothing, calls to addresses nothing serves, imports that can't work, routes that only answer "not implemented" and files nothing in the app reaches, in seconds, three at a time, and changes nothing.
 2. Just had an AI work on the project? Run `malveon --since HEAD~1` (or an older commit). It checks the commits the AI made, using their messages as what you asked for, and says what it added that nothing asked for, what it broke and what it left unfinished.
-3. To have every task checked from now on, run `malveon on` once. Or give malveon a plan: `malveon --plan PLAN.md` ([what a plan looks like](#the-plan-file); a plain checklist works).
+3. To set up automatic checks across your agent projects, run `malveon on` once and press Enter. Or give malveon a plan: `malveon --plan PLAN.md` ([what a plan looks like](#the-plan-file); a plain checklist works).
 
 Using VS Code or Cursor? Search "malveon" in Extensions. The command "Malveon: Scan this project" does step 1.
 
@@ -181,7 +181,7 @@ malveon           # what's wrong in the project right now
 
 It reads the whole project and lists the faults that need no plan or session to see: a button with no click handler (or an empty one), a call to an address none of your routes serves, an import of a file or name that doesn't exist, a route that only answers "not implemented", a file nothing in the app reaches. It shows the three most certain, says how many more there are (`malveon --all` lists them), and says what it did not look at (languages it has no reader for, see `malveon help languages`).
 
-**After an AI has worked.** When a session is open (`malveon on`, or your agent's prompt hook opened one) plain `malveon` also compares with the start: what was added that your words do not name, what existing code the change may have broken, what the agent claimed about its tests, whether tests were weakened. `malveon --since <ref>` does the same without a session, using the commits since `<ref>` and their messages as the request (a weak stand-in).
+**After an AI has worked.** When a Git session is open (from the folder watcher or your agent's prompt hook) plain `malveon` also compares with the start: what was added that your words do not name, what existing code the change may have broken, what the agent claimed about its tests, whether tests were weakened. `malveon --since <ref>` does the same without a session, using the commits since `<ref>` and their messages as the request (a weak stand-in).
 
 **With a plan.** `malveon --plan PLAN.md` (repeatable) checks each plan line: built and connected, broken, missing, half done, or not checkable.
 
@@ -256,13 +256,16 @@ If more than one plan file could be the plan, malveon asks you to pick, right in
 
 ## Check your prompts too, not just plan docs
 
-Most of what you ask an agent for never makes it into a plan doc. malveon can check your prompts as well. `malveon on` sets it up: it shows exactly what it will add to each agent's settings and writes only after you say yes.
+Run `malveon on` once and press Enter to enable prompt capture and automatic source checks across projects for the selected agents. Open a new agent session afterward. In Codex, use `/hooks` to review and approve the hooks. `malveon on --details` shows the settings and commands before writing them.
+
+User settings are `~/.claude/settings.json`, `~/.codex/hooks.json`, `~/.cursor/hooks.json`, and `~/.gemini/config/hooks.json`. Absolute `CLAUDE_CONFIG_DIR` and `CODEX_HOME` overrides are supported. Settings show configuration, and a received event establishes execution. If Malveon sees a matching enabled hook in a project's settings file, it leaves that event to the project hook. The host still controls project hook trust. `malveon off` pauses checks for the current project. User hooks check the working folder supplied by the agent and keep separate local history for each folder. [Claude Code hooks](https://code.claude.com/docs/en/hooks) · [Codex hooks](https://developers.openai.com/codex/hooks) · [Cursor hooks](https://cursor.com/docs/hooks) · [Antigravity hooks](https://antigravity.google/docs/hooks)
+
+In folders without a Git baseline, Malveon can capture prompts and check current source. It skips checks that need a before/after comparison. Setup never initializes Git or makes a first commit.
 
 ```bash
 malveon on
 ```
 
-Run it once, in a terminal, inside your project. It finds which agents this project uses (it sets up Claude Code and Codex from their folders; Cursor and Antigravity only when your editor is one of them or you name them with `--agent`, because their hooks have never been run against the real agents), shows you exactly what it will add to each one's settings, and only writes after you say yes. From then on:
 
 - Every prompt you type is saved word for word to `prompts.jsonl` in this project's Malveon user-data directory (see `malveon paths`). It comes from your editor's own hook, never from the agent. The state is outside your checkout, and nothing about your prompts is ever sent anywhere.
 - Your first prompt starts a session by itself, so you never start one by hand. A check that comes back clean ends the session, and your next prompt starts a new one.
@@ -311,7 +314,7 @@ Remove malveon the same way you installed it:
 | Scoop | `scoop uninstall malveon`, then `scoop bucket rm malveon` |
 | VS Code / Cursor | uninstall the malveon extension from the Extensions view |
 
-First run `malveon updates disable` on a Windows installation with idle updates enabled. Use `malveon paths --json` before removing the executable to locate its data. If you also want to remove saved history and settings, back up any original-plan snapshots or prompt history you need, then remove that data directory. Legacy project `.malveon/` directories and old user-home state may remain as recovery copies; remove those only when you no longer need them. Package-manager files and publisher signing material are separate. If you ran `malveon on`, remove the malveon entry from `.claude/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json` or `.agents/hooks.json`.
+First run `malveon updates disable` on a Windows installation with idle updates enabled. Use `malveon paths --json` before removing the executable to locate its data. If you also want to remove saved history and settings, back up any original-plan snapshots or prompt history you need, then remove that data directory. Legacy project `.malveon/` directories and old user-home state may remain as recovery copies; remove those only when you no longer need them. Package-manager files and publisher signing material are separate. If you ran `malveon on`, remove the Malveon entries from the user settings above. For project-local setup, remove the corresponding entries from `.claude/settings.local.json`, `.codex/hooks.json`, `.cursor/hooks.json` or `.agents/hooks.json`.
 
 ## The plan file
 
