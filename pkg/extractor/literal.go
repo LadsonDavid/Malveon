@@ -3,6 +3,7 @@ package extractor
 import (
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/LadsonDavid/Malveon/pkg/graph"
 )
@@ -17,6 +18,7 @@ type callSite struct {
 	argRaw         string   // raw text of the first argument, unparsed
 	enclosingFunc  string   // name of the innermost named function containing this call, "" if top-level/unknown
 	bodyFields     []string // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved
+	responseFields []string
 	tail           bool     // argRaw is only the end of the address (see graph.Node.Tail)
 	requiredFields []string // RouteHandler: see graph.Node.RequiredFields
 	receiver       string   // Python route: the router variable it hangs on
@@ -177,6 +179,9 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 			})
 		}
 	}
+	fetchIsShadowed := sync.OnceValue(func() bool {
+		return shadowedFetch.MatchString(src) || importTable(src)["fetch"] != ""
+	})
 	for _, m := range jsFetchPattern.FindAllStringIndex(src, -1) {
 		if !cm.codeAt(src, m[0]) {
 			continue
@@ -185,14 +190,19 @@ func scanJSLikeWith(src string, info *jsInfo) []callSite {
 		arg := withConsts(readFirstArg(src, openParen), consts)
 		argsList := readArgsList(src, openParen)
 		sentFields, _ := jsSentFieldsFromCallArgs(argsList, false)
+		responseFields := fetchResponseFields(src, m[0], openParen)
+		if responseFields != nil && fetchIsShadowed() {
+			responseFields = nil
+		}
 		for _, a := range urlAlternatives(arg, alts) {
 			sites = append(sites, callSite{
-				kind:       graph.NetworkCall,
-				method:     fetchMethod(argsList),
-				line:       lineOf(src, m[0]),
-				argRaw:     tailArg(a),
-				tail:       isTail(a),
-				bodyFields: sentFields,
+				kind:           graph.NetworkCall,
+				method:         fetchMethod(argsList),
+				line:           lineOf(src, m[0]),
+				argRaw:         tailArg(a),
+				tail:           isTail(a),
+				bodyFields:     sentFields,
+				responseFields: responseFields,
 			})
 		}
 	}

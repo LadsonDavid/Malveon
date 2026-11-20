@@ -7,7 +7,7 @@
       "name": "malveon",
       "source": "./plugins/malveon",
       "description": "Checks whether your AI agent's work matches what you asked for, by reading the real code.",
-      "version": "0.5.7"
+      "version": "0.5.8"
     }
   ]
 }

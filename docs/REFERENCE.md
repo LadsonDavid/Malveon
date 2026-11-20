@@ -234,7 +234,14 @@ It never sends your code, file names, plan, prompts, commit messages, error mess
 
 The only thing it remembers between runs is a random ID stored on your own machine, so two runs from you count as one person, not two. That ID isn't tied to your name, your email, or anything that could identify you.
 
+## Response fields
+
+The check can compare a direct JavaScript or TypeScript GET fetch with a literal local URL to one Next.js App Router handler in the same package. The caller must immediately read the decoded JSON through simple destructuring or a direct property return. The handler must return one flat JSON object with visible keys. Dynamic responses, alternate branches, spreads, and optional reads remain unchecked. A finding points to both source files. The check does not run the request.
+
 ## Use it from your AI agent (MCP)
+
+Malveon v0.5.8 offers nine MCP tools by default. The experimental layout tool requires `MALVEON_EXPERIMENTAL=1` when the server starts.
+
 
 `malveon mcp` runs malveon as an MCP server, so Claude Code, Cursor, Antigravity, or any other MCP client can call the `malveon_check` tool itself and read the same report you'd see in the terminal, GATE line included. No copying output into the chat. The `malveon_scan` tool does the plan-free scan, so an agent can look at a project nobody has set up yet. The `malveon_changed_walk` tool (same rules) walks you through existing things the agent changed. The `malveon_unused_walk` tool (local source, unreleased) returns what the agent built that nothing seems to reach and a fixed-wording list of things for *you* to check by hand; no tool can record an answer, only you can, in a terminal.
 

@@ -60,6 +60,7 @@ type Node struct {
 	Words          []string   // tokens used for loose feature-name matching
 	EnclosingFunc  string     // name of the innermost named function this node's line falls inside; "" if top-level or unknown
 	BodyFields     []string   // request fields sent (NetworkCall) or read via req.body (RouteHandler); nil if unresolved, non-nil (possibly empty) if resolved
+	ResponseFields []string   // literal JSON keys returned by a route or read by its caller; nil if unresolved
 	RequiredFields []string   // RouteHandler: the read fields the handler turns a request away for when missing; nil when no such guard was found
 	Tail           bool       // NetworkCall whose Path is only the end of the address (URL + "/signup"): the base was written in a variable, so it matches a route that ends with Path and is never judged on its own
 	External       bool       // NetworkCall to an absolute URL on another host (https://api.example.com/...): not a call to this project's server
@@ -128,6 +129,11 @@ func (g *Graph) BrokenImports() []BrokenImport {
 		for _, im := range g.Imports[file] {
 			switch {
 			case im.Missing != "":
+				// ponytail: a missing .mjs/.cjs target is usually a build output or a file copied in
+				// later (found on twenty: 3 of 3 were), so it is not judged; revisit if real breaks hide here.
+				if ext := strings.ToLower(path.Ext(im.Missing)); ext == ".mjs" || ext == ".cjs" {
+					continue
+				}
 				if strings.HasPrefix(im.Missing, ".") && jsLikeSpec(im.Missing) {
 					add(BrokenImport{File: file, Line: im.Line, Spec: im.Missing, Missing: true})
 				}

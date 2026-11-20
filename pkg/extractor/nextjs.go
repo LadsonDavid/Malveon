@@ -80,6 +80,7 @@ func scanNextRouteHandlers(relFile, src string) []callSite {
 					site.requiredFields = requiredFieldsIn(handlerBodyAt(src, paren), fields)
 				}
 				site.stub = isStubHandler(handlerBodyAt(src, paren))
+				site.responseFields = nextResponseFields(src, paren)
 			}
 			sites = append(sites, site)
 		}

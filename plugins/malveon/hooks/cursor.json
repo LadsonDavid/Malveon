@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "npx --prefer-offline -y malveon@0.5.7 hook prompt --agent cursor",
+        "timeout": 60
+      }
+    ],
+    "stop": [
+      {
+        "command": "npx --prefer-offline -y malveon@0.5.7 hook stop --agent cursor --mode enforce",
+        "timeout": 60
+      }
+    ]
+  }
+}

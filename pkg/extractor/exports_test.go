@@ -48,6 +48,8 @@ func TestScanJSExports(t *testing.T) {
 		{"a line that looks like an export inside a block comment or a template still counts: over-reading an export can only hide a break, never invent one", "/*\nexport const hidden = 1\n*/\nconst t = `\nexport const inString = 2\n`\nexport const shown = 3\n", "hidden inString shown", false},
 		{"nothing exported", "const a = 1\nconsole.log(a)\n", "", false},
 		{"declare const", "export declare const x: number\n", "x", false},
+		// a generated, minified file (Lingui's compiled catalogs): everything on one line
+		{"minified one-line source", "/*eslint-disable*/import type{Messages}from\"@lingui/core\";export const messages=JSON.parse(\"{}\");export function f(){}\n", "f messages", false},
 	}
 	for _, c := range cases {
 		names, open := exportsOf(c.src)
@@ -114,6 +116,8 @@ func TestBrokenImports(t *testing.T) {
 		"src/cjs.js":         "module.exports = { a: 1 }\n",
 		"src/UsesCjs.js":     "import { a, b } from './cjs'\n",
 		"src/UsesDefault.js": "import Thing from './lib/format'\nimport * as ns from './lib/format'\n",
+		// 2026-11-20: a missing .mjs/.cjs file is usually a build output or a file copied in later; not judged
+		"src/UsesBuilt.mjs": "import b from './built.cjs'\nconst m = await import('./prebuilt.mjs')\n",
 		"src/Missing.js":     "import x from './gone'\nimport data from './data.json'\nimport s from './s.module.css'\nimport y from '@/lib/gone'\nimport z from 'lodash'\n",
 	})
 	got := brokenKeys(g)

@@ -15,7 +15,7 @@ import (
 
 var (
 	// export [declare] [default] [async] [abstract] function|class|interface|enum|type|const|let|var Name
-	exportDeclPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+(?:declare[ \t]+)?(default[ \t]+)?(?:async[ \t]+)?(?:abstract[ \t]+)?(function\*?|class|interface|enum|namespace|module|type|const[ \t]+enum|const|let|var)[ \t]+([A-Za-z_$][\w$]*)`)
+	exportDeclPattern = regexp.MustCompile(`(?m)(?:^|[;}])[ \t]*export[ \t]+(?:declare[ \t]+)?(default[ \t]+)?(?:async[ \t]+)?(?:abstract[ \t]+)?(function\*?|class|interface|enum|namespace|module|type|const[ \t]+enum|const|let|var)[ \t]+([A-Za-z_$][\w$]*)`)
 	// export default ...  (named or not)
 	exportDefaultPattern = regexp.MustCompile(`(?m)^[ \t]*export[ \t]+default\b`)
 	// export { a, b as c } [from 'm'] · export type { T } [from 'm']

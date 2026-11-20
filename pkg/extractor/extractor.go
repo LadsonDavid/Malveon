@@ -357,6 +357,7 @@ func toNode(file string, s callSite) graph.Node {
 		Method:         s.method,
 		EnclosingFunc:  s.enclosingFunc,
 		BodyFields:     s.bodyFields,
+		ResponseFields: s.responseFields,
 		RequiredFields: s.requiredFields,
 		Tail:           s.tail,
 		Op:             s.op,

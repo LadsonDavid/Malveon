@@ -4,7 +4,7 @@
 
 An AI coding agent reports back confidently. The button it says it built has no click handler. The form posts to a route that does not exist. It quietly added a database table you never asked for. malveon reads the real code, never the agent's word, and answers with the file and line that prove it. If it cannot prove something, it says so instead of guessing.
 
-v0.5.5 improves source connections for literal GET forms and page links. Unchanged files and requests to remove content within a file remain unverified when the available evidence cannot establish behavior; they are not automatically accused as missing work. See the [reference](docs/REFERENCE.md) for supported boundaries.
+v0.5.8 reports when a frontend reads a key missing from a supported Next.js JSON response, suppresses several guess-based findings, and makes desktop notifications opt-in. See the [reference](docs/REFERENCE.md) for supported cases.
 
 ## Try it in 30 seconds
 
@@ -14,7 +14,7 @@ No plan, no setup. In your project's folder:
 npx malveon
 ```
 
-It lists buttons that do nothing, calls to addresses nothing serves, imports that cannot work and routes that only answer "not implemented". It changes nothing in your project. Faults in generated, test, template or example code are counted, not listed, so the top of the list is your own app.
+It can flag calls to addresses no supported route serves, imports it cannot resolve and routes that only answer "not implemented". A source check leaves your project files as they are. Findings in generated, test, template or example code can be counted separately.
 
 Just had an AI work on the project?
 
@@ -29,17 +29,13 @@ It checks the commits the AI made, using their messages as what you asked for, a
 By default you get a short view: one line saying what was read, then at most three findings, each with where it is, why, and what to do next.
 
 ```
-malveon checked 3 files, 1 plan item. Code read only; your app was not run.
+malveon checked 1 file. Code read only; your app was not run.
 
-Worth a look (2)
+Found problems (1)
 
-  1. Button does nothing (likely)   web/Orders.jsx:5
-     <button> "Refund" has no click handler, or an empty one.
-     Next: Add an onClick that does the job, or remove the button.
-
-  2. Route unfinished (likely)   server.js:6
-     POST /api/refunds only answers an error or "not implemented".
-     Next: Write the handler.
+  1. Import cannot work   index.js:1
+     The import import from './refund.js' in index.js cannot work: the file is missing or no longer exports that name.
+     Next: Fix the import path or restore what it imported.
 ```
 
 The headline is one of `Found problems` (something malveon trusts is wrong), `Worth a look`, or `Nothing found in the code I read`. It never says "verified": reading code is not running your app. `malveon --all` shows every finding and the details, and `malveon --json -` prints them as JSON for a script. **malveon never blocks anything and exits 0 whenever it checked** (1 only if it could not run); a script that wants to fail a build reads the JSON and decides itself.
@@ -55,7 +51,7 @@ malveon settle   say a finding is wrong, or confirm what your AI was asked
 malveon update   get the latest version
 ```
 
-Beyond the dead buttons and broken imports above, a check with a session also lists work nothing reaches, existing code the AI changed that other files still rely on (JavaScript, TypeScript, Go and Python), things it added that your words don't name, and whether its "all tests pass" matches its own log. `malveon --layout` looks at your pages in a real browser. Wording stays "possibly" until these checks are measured on enough real projects, and `malveon help languages` says exactly which stacks are read.
+A session check can also flag changes to existing code that other files rely on, additions your request does not name, and claims about test results that disagree with the recorded output. `malveon help languages` shows which stacks it reads.
 
 ## Check against a plan
 
@@ -95,11 +91,13 @@ codex plugin marketplace add LadsonDavid/Malveon   # Codex
 codex plugin add malveon@malveon
 ```
 
-Cursor: the repo has a Cursor marketplace file, but it has only been checked against Cursor's documentation, not run in Cursor. The plugin does not turn on prompt capture or the notice at "done"; run `malveon on` for that.
+Run `malveon on` to set up prompt capture and automatic checking. The Cursor marketplace file has been checked against Cursor's documentation.
+
+For plugins installed from GitHub, Claude Code and Cursor bundle prompt and completion hooks. Codex also bundles both hooks and requires you to review and trust them in `/hooks` before running them. Use one setup per agent to avoid running the plugin hooks alongside existing Malveon hooks from `malveon on`.
 
 ## What it does not do
 
-It reads code. It never checks a deployed site, and it starts your app only when you give it the command yourself and approve it once (`--layout --start`, optional). It opens a browser only for the optional layout check described in [the reference](docs/REFERENCE.md#every-check-in-detail) (your own Chrome or Edge, headless, on pages from your files or an app on your machine), so it cannot prove a real click works or that your business logic is right. It lists a short set of faults and says what it did not judge, so a quiet result is not a clean bill of health. Full list: [what it can't do](docs/REFERENCE.md#what-it-cant-do-yet).
+The default check reads source code. A report can establish a supported source connection and show what remains unchecked. Real clicks, deployed behavior and business logic still need runtime verification. See the [reference](docs/REFERENCE.md#what-it-cant-do-yet) for the limits of each check.
 
 ## Privacy
 

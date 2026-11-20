@@ -1,6 +1,6 @@
 {
   "name": "malveon",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "Checks whether your AI agent's work matches what you asked for, by reading the real code.",
   "author": { "name": "Malveon", "url": "https://github.com/LadsonDavid/Malveon" },
   "homepage": "https://github.com/LadsonDavid/Malveon",
@@ -8,6 +8,7 @@
   "keywords": ["verification", "code-review", "mcp", "ai-agents"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/codex.json",
   "interface": {
     "displayName": "Malveon",
     "shortDescription": "Check the agent's work against the real code",
