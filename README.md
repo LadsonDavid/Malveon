@@ -81,7 +81,7 @@ Or `npm install -g malveon`, Homebrew, Scoop, or the VS Code / Cursor extension 
 
 ## Plugins for Claude Code, Codex and Cursor
 
-A plugin adds Malveon's tools (`malveon_check`, `malveon_scan` and the rest) to your agent and a skill that tells it to run Malveon before it says a task is done. It needs Node.js; it runs `npx malveon@0.5.7 mcp`, which downloads the signed program on first use.
+A plugin adds Malveon's tools (`malveon_check`, `malveon_scan` and the rest) to your agent and a skill that tells it to run Malveon before it says a task is done. It needs Node.js; it runs `npx malveon@0.5.8 mcp`, which downloads the signed program on first use.
 
 ```
 /plugin marketplace add LadsonDavid/Malveon        # Claude Code
@@ -91,7 +91,9 @@ codex plugin marketplace add LadsonDavid/Malveon   # Codex
 codex plugin add malveon@malveon
 ```
 
-Run `malveon on` to set up prompt capture and automatic checking. The Cursor marketplace file has been checked against Cursor's documentation.
+If you already installed the plugin, refresh its marketplace and update the plugin, then open a new session. Plugin bundle v0.5.9 runs Malveon CLI v0.5.8.
+
+For a standalone CLI install, run `malveon on` to set up prompt capture and automatic checking.
 
 For plugins installed from GitHub, Claude Code and Cursor bundle prompt and completion hooks. Codex also bundles both hooks and requires you to review and trust them in `/hooks` before running them. Use one setup per agent to avoid running the plugin hooks alongside existing Malveon hooks from `malveon on`.
 

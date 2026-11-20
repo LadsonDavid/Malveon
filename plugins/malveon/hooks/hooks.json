@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx --prefer-offline -y malveon@0.5.7 hook prompt --agent claude",
+            "command": "npx --prefer-offline -y malveon@0.5.8 hook prompt --agent claude",
             "timeout": 30
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx --prefer-offline -y malveon@0.5.7 hook stop --agent claude --mode enforce",
+            "command": "npx --prefer-offline -y malveon@0.5.8 hook stop --agent claude --mode enforce",
             "timeout": 30
           }
         ]

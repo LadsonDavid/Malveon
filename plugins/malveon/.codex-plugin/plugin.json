@@ -1,6 +1,6 @@
 {
   "name": "malveon",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Checks whether your AI agent's work matches what you asked for, by reading the real code.",
   "author": { "name": "Malveon", "url": "https://github.com/LadsonDavid/Malveon" },
   "homepage": "https://github.com/LadsonDavid/Malveon",
