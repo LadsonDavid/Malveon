@@ -2,9 +2,9 @@
 
 **Your AI says "done." malveon reads the code and tells you what is actually true.**
 
-An AI coding agent reports back confidently. The button it says it built has no click handler. The form posts to a route that does not exist. It quietly added a database table you never asked for. malveon reads the real code, never the agent's word, and answers with the file and line that prove it. If it cannot prove something, it says so instead of guessing.
+An AI coding agent reports back confidently. An import it says works points at a file that is not there. A call it says it wired goes to a route nothing serves. A test that used to run is quietly switched off. It added a database table you never asked for. malveon reads the real code, never the agent's word, and answers with the file and line that prove it. If it cannot prove something, it says so instead of guessing.
 
-v0.5.8 reports when a frontend reads a key missing from a supported Next.js JSON response, suppresses several guess-based findings, and makes desktop notifications opt-in. See the [reference](docs/REFERENCE.md) for supported cases.
+v0.5.10 lists only what it can back with a file and line. Guesses, TODOs, debug logs and other word-match findings show only under `malveon --all`, route-clash and dead-button findings are gone, and anonymous usage counts can be turned off (`--no-telemetry` or `DO_NOT_TRACK=1`).
 
 ## Try it in 30 seconds
 
@@ -38,7 +38,7 @@ Found problems (1)
      Next: Fix the import path or restore what it imported.
 ```
 
-The headline is one of `Found problems` (something malveon trusts is wrong), `Worth a look`, or `Nothing found in the code I read`. It never says "verified": reading code is not running your app. `malveon --all` shows every finding and the details, and `malveon --json -` prints them as JSON for a script. **malveon never blocks anything and exits 0 whenever it checked** (1 only if it could not run); a script that wants to fail a build reads the JSON and decides itself.
+The headline is one of `Found problems` (something malveon trusts is wrong), `Worth a look`, `Nothing found in the code I read`, or, in a project with a session, `No confirmed problems in changed files` (anything less certain is only counted: `malveon --all` lists it). It never says "verified": reading code is not running your app. `malveon --all` shows every finding and the details, and `malveon --json -` prints them as JSON for a script. **malveon never blocks anything and exits 0 whenever it checked** (1 only if it could not run); a script that wants to fail a build reads the JSON and decides itself.
 
 ## The commands
 
@@ -81,7 +81,7 @@ Or `npm install -g malveon`, Homebrew, Scoop, or the VS Code / Cursor extension 
 
 ## Plugins for Claude Code, Codex and Cursor
 
-A plugin adds Malveon's tools (`malveon_check`, `malveon_scan` and the rest) to your agent and a skill that tells it to run Malveon before it says a task is done. It needs Node.js; it runs `npx malveon@0.5.8 mcp`, which downloads the signed program on first use.
+A plugin adds Malveon's tools (`malveon_check`, `malveon_scan` and the rest) to your agent and a skill that tells it to run Malveon before it says a task is done. It needs Node.js; it runs `npx malveon@0.5.10 mcp`, which downloads the signed program on first use.
 
 ```
 /plugin marketplace add LadsonDavid/Malveon        # Claude Code
@@ -91,7 +91,7 @@ codex plugin marketplace add LadsonDavid/Malveon   # Codex
 codex plugin add malveon@malveon
 ```
 
-If you already installed the plugin, refresh its marketplace and update the plugin, then open a new session. Plugin bundle v0.5.9 runs Malveon CLI v0.5.8.
+If you already installed the plugin, refresh its marketplace and update the plugin, then open a new session. Plugin bundle v0.5.10 runs Malveon CLI v0.5.10.
 
 For a standalone CLI install, run `malveon on` to set up prompt capture and automatic checking.
 
@@ -103,7 +103,7 @@ The default check reads source code. A report can establish a supported source c
 
 ## Privacy
 
-malveon sends a few anonymous usage counts: your OS and CPU type, malveon's version, which command ran, and numbers such as how many problems a check found. It never sends your code, file names, plan, prompts or commit messages. The program has no setting to turn this off; the VS Code and Cursor extension follows your editor's own telemetry setting. The exact list is in [Usage tracking](docs/REFERENCE.md#usage-tracking). `MALVEON_NO_UPDATE_CHECK=1` (or `DO_NOT_TRACK=1`) stops the daily update check.
+malveon sends a few anonymous usage counts: your OS and CPU type, malveon's version, which command ran, and numbers such as how many problems a check found. It never sends your code, file names, plan, prompts or commit messages. It is on by default and easy to turn off: add `--no-telemetry` to any command, or set `MALVEON_NO_TELEMETRY=1` or `DO_NOT_TRACK=1`; nothing is sent and no anonymous ID is created. The VS Code and Cursor extension also follows your editor's own telemetry setting. The exact list is in [Usage tracking](docs/REFERENCE.md#usage-tracking). `MALVEON_NO_UPDATE_CHECK=1` (or `DO_NOT_TRACK=1`) stops the daily update check.
 
 ## Open source and license
 

@@ -3,13 +3,13 @@
   "hooks": {
     "beforeSubmitPrompt": [
       {
-        "command": "npx --prefer-offline -y malveon@0.5.8 hook prompt --agent cursor",
+        "command": "npx --prefer-offline -y malveon@0.5.10 hook prompt --agent cursor",
         "timeout": 60
       }
     ],
     "stop": [
       {
-        "command": "npx --prefer-offline -y malveon@0.5.8 hook stop --agent cursor --mode enforce",
+        "command": "npx --prefer-offline -y malveon@0.5.10 hook stop --agent cursor --mode enforce",
         "timeout": 60
       }
     ]

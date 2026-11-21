@@ -2,7 +2,7 @@
   "mcpServers": {
     "malveon": {
       "command": "npx",
-      "args": ["-y", "malveon@0.5.8", "mcp"]
+      "args": ["-y", "malveon@0.5.10", "mcp"]
     }
   }
 }
